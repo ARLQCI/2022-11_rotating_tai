@@ -1,0 +1,194 @@
+#-*- mode: org -*-
+#+STARTUP: showall
+#+STARTUP: inlineimages
+#+STARTUP: latexpreview
+#+title: SAGNAC TAI
+
+# C-c C-v b: run all
+
+** Setting everything up
+
+#+begin_src jupyter-julia :session jl :results silent
+using Revise
+includet("TAI.jl");
+#+end_src
+
+#+begin_src jupyter-julia :session jl :results silent
+function V(z; z0=0, E0=0, m=8, depth=2.2MHz)
+    return E0 - depth * cos(m*(z - z0))
+end
+
+function dV(z; z0=0, E0=0, m=8, depth=2.2MHz)
+    return depth * m * sin(m*(z - z0))
+end
+#+end_src
+
+I don't think we need to simulate from $0$ to $2\pi$ (unless we need that much space to accelerate)
+
+#+begin_src jupyter-julia :session jl :results silent
+t_target = 0.02ms
+v_target = (2π/8) / t_target
+z_target = v_target * t_target
+
+zmin = -π/8
+zmax = 3π/8
+tlist = collect(range(0, t_target, step=0.05μs))
+wrk = Wrk(zmin, zmax, tlist, V, dV; nz=1024, Rb_mass=√(40μm)*Rb_mass)
+zlist = collect(range(0, z_target, length=length(wrk.tlist)))
+
+U_boost = exp.(+1im * √(40μm)*Rb_mass * v_target * wrk.zgrid)
+#+end_src
+
+#+begin_src jupyter-julia :session jl
+Ψx0 = get_ground_state(wrk, 0; d=0.05, steps=10000, h0=wrk.h)
+Ψxt = get_ground_state(wrk, π/4; d=0.05, steps=10000, h0=wrk.h)
+
+plot(wrk.zgrid, abs2.(Ψx0), label="Ground state")
+plot!(wrk.zgrid, abs2.(Ψxt), label="Target state?")
+plot!(wrk.zgrid, V.(wrk.zgrid)/400, label="Potential")
+#+end_src
+
+#+RESULTS:
+[[file:./.ob-jupyter/333dbdae807202000702d4a0928d34c1dda0b712.svg]]
+
+#+begin_src jupyter-julia :session jl
+propagate(wrk, Ψx0, zlist);
+plot(wrk.zgrid, abs2.(wrk.Ψ_list[:, 1]))
+plot!(wrk.zgrid, abs2.(wrk.Ψ_list[:, end]))
+#+end_src
+
+#+RESULTS:
+[[file:./.ob-jupyter/f2d339976a24fa784686be83873e3ef03c1d4fe1.svg]]
+
+*** Galilean boost
+
+$U = \exp(i m v x)$. It works!
+
+#+begin_src jupyter-julia :session jl
+propagate(wrk, U_boost .* Ψx0, zlist);
+plot(wrk.zgrid, abs2.(wrk.Ψ_list[:, 1]))
+plot!(wrk.zgrid, abs2.(wrk.Ψ_list[:, end]))
+#+end_src
+
+#+RESULTS:
+[[file:./.ob-jupyter/b1c9c7b7092d2d66ddc5a8607e2f8928a2ec48e3.svg]]
+
+Does the boost do something?
+#+begin_src jupyter-julia :session jl
+@show abs2.(Ψx0' * Ψx0)
+@show abs2.(Ψx0' * (U_boost .* Ψx0))
+@show abs2.(Ψxt' * wrk.Ψ_list[:, end])
+@show abs2.((U_boost .* Ψxt)' * wrk.Ψ_list[:, end]); # This increases if I take a smaller dt (h)
+#+end_src
+
+#+RESULTS:
+: abs2.(Ψx0' * Ψx0) = 1.0
+: abs2.(Ψx0' * (U_boost .* Ψx0)) = 6.861600863282802e-10
+: abs2.(Ψxt' * wrk.Ψ_list[:, end]) = 7.104865725751272e-10
+: abs2.((U_boost .* Ψxt)' * wrk.Ψ_list[:, end]) = 0.9947755664523873
+
+** Overlap squared
+
+#+begin_src jupyter-julia :session jl
+function J(zlist; Ψxt=Ψxt)
+    return f(wrk, Ψx0, Ψxt, zlist)
+end
+
+function dJ!(dzlist, zlist; Ψxt=Ψxt)
+    df(wrk, Ψx0, Ψxt, zlist)
+    copy!(dzlist, wrk.grad)
+end
+
+zlist = collect(range(0, z_target, length=length(wrk.tlist)))
+zlist_opt = custom_optimize(J, dJ!, zlist, maxiter=100, pgtol=1e-8);
+
+## DEBUG: Did I miss a constant?
+# @show df_n(wrk, Ψx0, Ψxt, zlist, length(zlist)-1; ϵ=1e-7)  #* 0.00014945966527967757 / 0.24033114179311532
+# df(wrk, Ψx0, Ψxt, zlist)
+# wrk.grad
+
+propagate(wrk, Ψx0, zlist_opt);
+plot(wrk.zgrid, abs2.(wrk.Ψ_list[:, 1]))
+plot!(wrk.zgrid, abs2.(wrk.Ψ_list[:, end]))
+#+end_src
+
+#+RESULTS:
+:RESULTS:
+: -0.143935489
+: -0.99998
+[[file:./.ob-jupyter/8a9c1c98bd91f506aee357410ff8293796829a21.svg]]
+:END:
+
+#+begin_src jupyter-julia :session jl
+plot_dyn(wrk, zlist_opt)
+#+end_src
+
+#+RESULTS:
+[[file:./.ob-jupyter/02f1d89e26efd07c492d44027bfaeb2d5f4a176d.svg]]
+
+** running cost
+
+#+begin_src jupyter-julia :session jl
+function J(zlist; Ψxt=Ψxt)
+    return g(wrk, Ψx0, Ψxt, zlist) + u(wrk, zlist)
+end
+
+function dJ!(dzlist, zlist; Ψxt=Ψxt)
+    dg(wrk, Ψx0, Ψxt, zlist)
+    du(wrk, zlist; acc=true)
+    copy!(dzlist, wrk.grad)
+end
+
+zlist = collect(range(0, 2π/8, length=length(wrk.tlist)))
+zlist_opt = custom_optimize(J, dJ!, zlist, maxiter=100, pgtol=1e-8);
+
+## DEBUG: Did I miss a constant?
+# @show dg_n(wrk, Ψx0, Ψxt, zlist, length(zlist)-3; ϵ=1e-7)
+# dg(wrk, Ψx0, Ψxt, zlist)
+# wrk.grad
+#+end_src
+
+#+RESULTS:
+:RESULTS:
+: -0.009102878
+: -0.22969
+#+begin_example
+201-element Vector{Float64}:
+ 0.0
+ 0.18419000237220942
+ 0.1894075696914635
+ 0.18972701173359
+ 0.1900361459301944
+ 0.19047794961143827
+ 0.1910580929070241
+ 0.19177708486499315
+ 0.19263528480173564
+ 0.19363302468551827
+ 0.1947705984737306
+ 0.19604822909751513
+ 0.19746603000619523
+ ⋮
+ 0.7849238551477239
+ 0.7847356564089812
+ 0.7846242854141062
+ 0.7845889686502913
+ 0.7846058706543462
+ 0.7846422844490151
+ 0.7846693058406624
+ 0.7846758099074761
+ 0.7846783616003293
+ 0.7847092079093282
+ 0.784875239969971
+ 0.7853981633974483
+#+end_example
+:END:
+
+#+begin_src jupyter-julia :session jl
+propagate(wrk, Ψx0, zlist_opt);
+plot(wrk.zgrid, abs2.(wrk.Ψ_list[:, 1]))
+plot!(wrk.zgrid, abs2.(wrk.Ψ_list[:, end]))
+plot_dyn(wrk, zlist_opt)
+#+end_src
+
+#+RESULTS:
+[[file:./.ob-jupyter/1ac0b6181f0035521e49f890527a10a64ca5abe0.svg]]

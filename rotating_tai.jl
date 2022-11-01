@@ -1,0 +1,173 @@
+using LinearAlgebra
+using QuantumPropagators
+import QuantumPropagators.Controls:
+    getcontrols, evalcontrols, evalcontrols!, substitute_controls
+import QuantumControlBase: getcontrolderiv
+
+
+#### Split Operator
+
+
+# Reminder: any operator needs to implement
+#
+# * mul!
+
+struct SplitOperator
+    T # static
+    V # static
+    to_p!::Function # coord to momentum
+    to_x!::Function # momentum to coord
+end
+
+
+function LinearAlgebra.mul!(C, A::SplitOperator, B, α, β)
+    # |C⟩ = β |C⟩ + α Â |B⟩ = (β |C⟩ + α V̂ |B⟩) + α T̂ |B⟩
+    mul!(C, A.V, B, α, β)
+    A.to_p!(B)
+    A.to_p!(C)
+    mul!(C, A.T, B, α, true)
+    A.to_x!(B)
+    A.to_x!(C)
+    #C̃ = similar(C)
+    #mul!(C̃, A.T, B, α, false)
+    #A.to_x!(C̃)
+    #C .+= C̃
+end
+
+
+#### Split Generator
+
+
+# Reminder: any generator needs to implement
+#
+# * getcontrols
+# * evalcontrols
+# * evalcontrols!
+# * substitute_controls
+# * getcontrolderiv
+#
+
+struct SplitGenerator
+    T  # (potentially) time-dependent
+    V  # time-dependent
+    to_p!::Function
+    to_x!::Function
+end
+
+function getcontrols(gen::SplitGenerator)
+    @assert length(getcontrols(gen.T)) == 0
+    return getcontrols(gen.V)
+end
+
+function evalcontrols(gen::SplitGenerator, args...)
+    SplitOperator(
+        evalcontrols(gen.T, args...),
+        evalcontrols(gen.V, args...),
+        gen.to_p!,
+        gen.to_x!
+    )
+end
+
+function evalcontrols!(op::SplitOperator, gen::SplitGenerator, args...)
+    evalcontrols!(op.T, gen.T, args...)
+    evalcontrols!(op.V, gen.V, args...)
+end
+
+function substitute_controls(gen::SplitGenerator, controls_map)
+    @assert length(getcontrols(gen.T)) == 0
+    V = substitute_controls(gen.V, controls_map)
+    return SplitGenerator(gen.T, V, gen.to_p!, gen.to_x!)
+end
+
+function getcontrolderiv(generator::SplitGenerator, control)
+    @assert length(getcontrols(gen.T)) == 0
+    V_deriv = getcontrolderiv(generator.V, control)
+    return SplitGenerator(gen.T, V_deriv, gen.to_p!, gen.to_x!)
+end
+
+
+#### RotTAI_PotentialGenerator
+
+
+@doc raw"""
+```math
+V(t) = V_0 \cos(m(θ ± ϕ(t))
+```
+"""
+@Base.kwdef struct RotTAI_PotentialGenerator
+    V0::Float64
+    m::Int64
+    theta::Vector{Float64}
+    phi # control
+end
+
+
+function getcontrols(gen::RotTAI_PotentialGenerator)
+    return (gen.phi, )
+end
+
+function evalcontrols(gen::RotTAI_PotentialGenerator, vals_dict, args...)
+    op = Diagonal(similar(gen.theta))
+    evalcontrols!(op, gen, vals_dict, args...)
+end
+
+
+function evalcontrols!(
+    op::Diagonal{Float64,Vector{Float64}},
+    gen::RotTAI_PotentialGenerator,
+    vals_dict,
+    args...
+)
+    V₀::Float64 = gen.V0
+    m::Int64 = gen.m
+    θ::Vector{Float64} = gen.theta
+    ϕ::Float64 = vals_dict[gen.phi]
+    op.diag .= V₀ .* cos.(m .* (θ .+ ϕ))
+    return op
+end
+
+
+function getcontrolderiv(generator::RotTAI_PotentialGenerator, control)
+    return RotTAI_PotentialDerivGenerator(
+        generator.V0,
+        generator.m,
+        generator.theta,
+        generator.phi
+    )
+end
+
+
+#### RotTAI_PotentialDerivGenerator
+
+
+@doc raw"""
+```math
+V(t) = - m V_0 \sin(m(θ ± ϕ(t))
+```
+"""
+struct RotTAI_PotentialDerivGenerator
+    V0::Float64
+    m::Int64
+    theta::Vector{Float64}
+    phi # control
+end
+
+
+function evalcontrols(gen::RotTAI_PotentialDerivGenerator, vals_dict, args...)
+    op = Diagonal(similar(theta))
+    evalcontrols!(op, gen, vals_dict, args...)
+end
+
+
+function evalcontrols!(
+    op::Diagonal{Float64,Vector{Float64}},
+    gen::RotTAI_PotentialDerivGenerator,
+    vals_dict,
+    args...
+)
+    V₀::Float64 = op.V0
+    m::Int64 = op.m
+    θ::Vector{Float64} = op.theta
+    ϕ::Float64 = vals_dict[op.phi]
+    op.diag = -m .* V₀ .* sin.(m .* (θ .+ ϕ))
+end
