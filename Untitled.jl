@@ -37,8 +37,14 @@ const N_sites = 8;
 include("./rotating_tai.jl")
 
 
-tlist = collect(range(0, 100ms, step=25ns));
+include("./split_propagator.jl")
+
+tlist = collect(range(0, 100ms, step=250ns));
+tlist = collect(range(0, 1sec, step=10μs)); # DEBUG
 theta_grid = collect(range(0, 2π, length=1024));
+theta_grid = collect(range(0, 2, length=1024)); # DEBUG
+
+TAI_RADIUS^2 * Rb_mass
 
 function rotating_tai_hamiltonian(; tlist, V0, m, theta, phi, mass=(TAI_RADIUS^2 * Rb_mass))
     V = RotTAI_PotentialGenerator(; V0, m=m, theta=theta, phi)
@@ -54,8 +60,12 @@ end
 
 phi(t; w0, t_r) = 0.5 * w0 * t - 0.5 * w0* t_r * sin(π * t / t_r) / π
 
-t = collect(range(0, 100ms, length=1000));
-plot(t, phi.(t; w0=(2π/sec), t_r=100ms))
+phi(t; args...) = 0.3
+
+phi(t; args...) = (0.2π/sec) * t # DEBUG
+
+t = collect(range(0, tlist[end], length=1000));
+plot(t ./ sec, phi.(t; w0=(2π/sec), t_r=100ms))
 
 Ĥ = rotating_tai_hamiltonian(
     tlist=tlist,
@@ -67,12 +77,12 @@ Ĥ = rotating_tai_hamiltonian(
 
 ϕ = getcontrols(Ĥ)[1]
 
-ϕ
+plot(ϕ.(tlist))
 
-@which evalcontrols(Ĥ.V, IdDict(ϕ => ϕ(0)))
-
-Ĥ₀ = evalcontrols(Ĥ, IdDict(ϕ => ϕ(0))) # XXX
+Ĥ₀ = evalcontrols(Ĥ, IdDict(ϕ => 0.0))
 V̂₀ = Ĥ₀.V;
+
+# ## Calculate initial state
 
 plot(theta_grid./(2π), V̂₀.diag./MHz, xlabel="θ/2π", ylabel="Energy (MHz)")
 
@@ -103,6 +113,103 @@ function get_ground_state(Ĥ₀, theta, θ₀=0.0; steps=10000, d=1.0)
     return Ψx
 end
 
-Ψ_ground = get_ground_state(Ĥ₀, theta_grid, π/16,  d=0.05, steps=10_000)
+Ψ_ground = get_ground_state(Ĥ₀, theta_grid, 2π/16,  d=0.05, steps=10_000)
 
-plot(abs2.(Ψ_ground))
+plot(theta_grid./(2π), V̂₀.diag./MHz, xlabel="θ/2π", ylabel="Energy (MHz)")
+_offset = minimum(V̂₀.diag./MHz)
+plot!(theta_grid./(2π), 3 .* abs2.(Ψ_ground).+_offset, label="|Ψ₀|²", xlim=(0,0.15))
+
+# ## Testing the propstep (DEBUG)
+
+# + active=""
+# #plotly()
+
+# + active=""
+# Ĥ = rotating_tai_hamiltonian(
+#     tlist=tlist,
+#     theta=theta_grid,
+#     V0=2.2MHz,
+#     m=N_sites,
+#     phi=t->0.0
+# );
+
+# + active=""
+# H_op = evalcontrols(Ĥ, IdDict(getcontrols(Ĥ)[1] => getcontrols(Ĥ)[1](0.0)));
+# plot(TAI_RADIUS.*theta_grid./(2π), H_op.V.diag/MHz, xlabel="θ/2π", ylabel="Energy (MHz)", label="V")
+# plot!(TAI_RADIUS.*theta_grid./(2π), 5 .* abs2.(Ψ_ground) .- 2.2, label="|Ψ₀|²")
+
+# + active=""
+# dt = 500*tlist[2] - tlist[1]
+
+# + active=""
+# include("./split_propagator.jl")
+
+# + active=""
+# wrk = SplitPropWrk(Ĥ, H_op, dt)
+
+# + active=""
+# Ψ = copy(Ψ_ground)
+# Ψ = splitprop!(Ψ, H_op, dt, wrk)
+
+# + active=""
+# _tlist = [0.0, dt]
+# propagator = initprop(Ψ_ground, Ĥ, _tlist; method=:splitprop)
+# Ψ = propstep!(propagator)
+# #propagator.n
+# #propagator.tlist
+
+# + active=""
+# plot(propagator.genop.V.diag)
+
+# + active=""
+# _pwc_set_genop!(propagator, 1);
+
+# + active=""
+# plot(propagator.genop.V.diag)
+
+# + active=""
+# propagator.parameters
+
+# + active=""
+# IdDict(c => propagator.parameters[c][1] for c in propagator.controls)
+
+# + active=""
+# norm(Ψ)
+
+# + active=""
+# _xshift = 0.0#1
+# plot(theta_grid./(2π).-_xshift, abs2.(Ψ_ground), label="|Ψ₀|²", marker=true)
+# plot!(theta_grid./(2π), abs2.(Ψ), label="|Ψ|²", marker=true)
+
+# + active=""
+# plot(theta_grid./(2π), abs2.(Ψ) .- abs2.(Ψ_ground), label="Δ|Ψ|²")
+# -
+
+# ## Propagation
+
+# +
+#tlist = collect(range(0, 10000ms, step=25000ns)); # DEBUG
+# -
+
+states = propagate(Ψ_ground, Ĥ, tlist; method=:splitprop, storage=true, showprogress=true);
+
+plot(abs2.(Ψ_ground), marker=true)
+plot!(abs2.(states[:,end]), marker=true)
+
+plot(evalcontrols(Ĥ, IdDict(getcontrols(Ĥ)[1] => getcontrols(Ĥ)[1](1.0))).V.diag)
+
+function plot_system(generator, states, theta_grid, tlist, n; psi_scale=5)
+    t = tlist[n]
+    Ĥ = generator
+    V = evalcontrols(Ĥ, IdDict(getcontrols(Ĥ)[1] => getcontrols(Ĥ)[1](t))).V.diag
+    offset = minimum(V/MHz)
+    Ψ = states[:,n]
+    fig = plot(theta_grid./(2π), V/MHz, xlabel="θ/2π", ylabel="Energy (MHz)", label="V")
+    plot!(fig, theta_grid./(2π), psi_scale*abs2.(Ψ).+offset, label="|Ψ|²", xlim=(0, 0.15))
+    plot!(title="t=$(t/sec)s")
+end
+
+anim = @animate for n=1:10_000:length(tlist)
+    plot_system(Ĥ, states, theta_grid, tlist, n)
+end
+gif(anim, "anim.gif", fps=10)

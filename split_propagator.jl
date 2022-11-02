@@ -1,4 +1,48 @@
-using QuantumPropagators: PWCPropagator, _pwc_set_t!, _pwc_set_genop!, _pwc_get_max_genop, _pwc_process_parameters
+using QuantumPropagators:
+    PWCPropagator, _pwc_set_t!, _pwc_set_genop!, _pwc_get_max_genop, _pwc_process_parameters
+import QuantumPropagators: initprop, set_t!, propstep!
+
+
+###############################################################################
+
+struct SplitPropWrk
+
+    dt::Float64
+    UT_op::Diagonal{ComplexF64, Vector{ComplexF64}}
+    UV2_op::Diagonal{ComplexF64, Vector{ComplexF64}}
+    T_is_static::Bool
+    V_is_static::Bool
+
+    function SplitPropWrk(gen::SplitGenerator, genop::SplitOperator, dt::Float64)
+        UT_op = exp(-1im .* genop.T .* dt)
+        UV2_op = exp(-0.5im .* genop.V .* dt)
+        T_is_static = (gen.T ≡ genop.T)
+        V_is_static = (gen.V ≡ genop.V)
+        new(dt, UT_op, UV2_op, T_is_static, V_is_static)
+    end
+end
+
+
+function splitprop!(Ψ, H::SplitOperator, dt, wrk; _...)
+    @assert dt == wrk.dt
+    T = H.T
+    V = H.V
+    if !wrk.T_is_static
+        wrk.UT_op.diag .= exp.(-1im .* T.diag .* dt)
+    end
+    if !wrk.V_is_static
+        wrk.UV2_op.diag .= exp.(-0.5im .* V.diag .* dt)
+    end
+    @. Ψ = wrk.UV2_op.diag * Ψ
+    H.to_p!(Ψ)
+    @. Ψ = wrk.UT_op.diag * Ψ
+    H.to_x!(Ψ)
+    @. Ψ = wrk.UV2_op.diag * Ψ
+    return Ψ
+end
+
+
+###############################################################################
 
 mutable struct SplitPropagator{GT,OT,ST,WT<:SplitPropWrk} <: PWCPropagator
     generator::GT
@@ -13,6 +57,7 @@ mutable struct SplitPropagator{GT,OT,ST,WT<:SplitPropWrk} <: PWCPropagator
     backward::Bool
     inplace::Bool
 end
+
 
 set_t!(propagator::SplitPropagator, t) = _pwc_set_t!(propagator, t)
 
@@ -31,13 +76,14 @@ function initprop(
     controls = getcontrols(generator)
     G::SplitOperator = _pwc_get_max_genop(generator, controls, tlist)
     parameters = _pwc_process_parameters(parameters, controls, tlist)
-    wrk = SplitPropWrk(...)
     n = 1
     t = tlist[1]
     if backward
         n = length(tlist) - 1
         t = float(tlist[n+1])
     end
+    dt = tlist[2] - tlist[1]
+    wrk = SplitPropWrk(generator, G, dt)
     GT = typeof(generator)
     OT = typeof(G)
     ST = typeof(state)
@@ -66,23 +112,14 @@ function propstep!(propagator::SplitPropagator)
     if propagator.backward
         dt = -dt
     end
+    Ψ = propagator.state
     if propagator.inplace
-    else
         _pwc_set_genop!(propagator, n)
+        H = propagator.genop
+        _Ψ = splitprop!(Ψ, H, dt, propagator.wrk)
+        @assert _Ψ ≡ Ψ # DEBUG
+    else
         error("Not implemented")
     end
-end
-
-
-###############################################################################
-
-struct SplitPropWrk
-    function SplitPropWrk()
-        new()
-    end
-end
-
-
-function splitprop!(Ψ, H::SplitOperator, dt, wrk; _...)
-    # TODO
+    return Ψ
 end

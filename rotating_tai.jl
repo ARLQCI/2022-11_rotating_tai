@@ -122,7 +122,7 @@ function evalcontrols!(
     m::Int64 = gen.m
     θ::Vector{Float64} = gen.theta
     ϕ::Float64 = vals_dict[gen.phi]
-    op.diag .= V₀ .* cos.(m .* (θ .+ ϕ))
+    op.diag .= V₀ .* cos.(m .* (θ .- ϕ))
     return op
 end
 
