@@ -13,8 +13,8 @@ import QuantumControlBase: getcontrolderiv
 # * mul!
 
 struct SplitOperator
-    T # static
-    V # static
+    T::Diagonal{Float64,Vector{Float64}}
+    V::Diagonal{Float64,Vector{Float64}}
     to_p!::Function # coord to momentum
     to_x!::Function # momentum to coord
 end
@@ -169,5 +169,5 @@ function evalcontrols!(
     m::Int64 = op.m
     θ::Vector{Float64} = op.theta
     ϕ::Float64 = vals_dict[op.phi]
-    op.diag = -m .* V₀ .* sin.(m .* (θ .+ ϕ))
+    op.diag .= -m .* V₀ .* sin.(m .* (θ .+ ϕ))
 end
