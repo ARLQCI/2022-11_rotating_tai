@@ -1,5 +1,5 @@
 using QuantumPropagators:
-    PWCPropagator, _pwc_set_t!, _pwc_set_genop!, _pwc_get_max_genop, _pwc_process_parameters
+    PWCPropagator, _pwc_set_t!, _pwc_set_genop!, _pwc_get_max_genop, _pwc_process_parameters, _pwc_advance_time!
 import QuantumPropagators: initprop, set_t!, propstep!
 
 
@@ -121,5 +121,6 @@ function propstep!(propagator::SplitPropagator)
     else
         error("Not implemented")
     end
-    return Ψ
+    _pwc_advance_time!(propagator)
+    return propagator.state
 end
