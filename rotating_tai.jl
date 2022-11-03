@@ -20,6 +20,9 @@ struct SplitOperator
 end
 
 
+Base.size(O::SplitOperator) = size(O.V)
+
+
 function LinearAlgebra.mul!(C, A::SplitOperator, B, α, β)
     # |C⟩ = β |C⟩ + α Â |B⟩ = (β |C⟩ + α V̂ |B⟩) + α T̂ |B⟩
     mul!(C, A.V, B, α, β)
