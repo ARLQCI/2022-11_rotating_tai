@@ -174,3 +174,44 @@ function evalcontrols!(
     ϕ::Float64 = vals_dict[op.phi]
     op.diag .= -m .* V₀ .* sin.(m .* (θ .+ ϕ))
 end
+
+
+#### get_ground_state
+
+
+"""Determine a local ground state of the given operator Ĥ₀.
+
+The `θ₀` and `d` should be approximate guesses for where the state should be
+located and its width. That is, `θ₀` should be around the minimum of the well
+for which the ground state should be obtained.
+
+The state is obtained with imaginary split propagation with the given number of
+`steps`.
+"""
+function get_ground_state(Ĥ₀::SplitOperator, theta_grid, θ₀=2π/16; steps=10000, d=0.05)
+    h = -1im
+    Uk2 = exp(-0.5im * h * Ĥ₀.T)
+    Uk = exp(-1im * h * Ĥ₀.T)
+    Ux = exp(-1im * h * Ĥ₀.V)
+    θ = theta_grid
+
+    Ψx = convert(Array{ComplexF64}, exp.(-(θ .- θ₀).^2/d^2))
+    normalize!(Ψx)
+
+    Ψk = fft(Ψx)
+
+    for i=1:steps
+        Ψk = Uk2 * Ψk
+        Ψx = ifft(Ψk)
+        Ψx = Ux * Ψx
+        Ψk = fft(Ψx)
+        Ψk = Uk2 * Ψk
+
+        normalize!(Ψk)
+    end
+
+    Ψx = ifft(Ψk)
+    normalize!(Ψx)
+
+    return Ψx
+end

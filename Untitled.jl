@@ -18,6 +18,8 @@ using QuantumPropagators
 using LinearAlgebra
 using FFTW
 
+using Revise
+
 using Plots
 
 const μm = 1
@@ -34,10 +36,10 @@ const TAI_RADIUS = 42μm
 const N_sites = 8;
 
 
-include("./rotating_tai.jl")
+includet("./rotating_tai.jl")
 
 
-include("./split_propagator.jl")
+includet("./split_propagator.jl")
 
 tlist = collect(range(0, 100ms, step=250ns));
 #tlist = collect(range(0, 1sec, step=10μs)); # DEBUG
@@ -72,6 +74,8 @@ phi(t; w0, t_r) = 0.5 * w0 * t - 0.5 * w0* t_r * sin(π * t / t_r) / π
 t = collect(range(0, tlist[end], length=1000));
 plot(t ./ sec, phi.(t; w0=(2π/sec), t_r=100ms))
 
+phi(tlist[end]; w0=(2π/sec), t_r=100ms)
+
 Ĥ = rotating_tai_hamiltonian(
     tlist=tlist,
     theta=theta_grid,
@@ -91,95 +95,11 @@ V̂₀ = Ĥ₀.V;
 
 plot(theta_grid./(2π), V̂₀.diag./MHz, xlabel="θ/2π", ylabel="Energy (MHz)")
 
-function get_ground_state(Ĥ₀, theta, θ₀=0.0; steps=10000, d=1.0)
-    h = -1im
-    Uk2 = exp(-0.5im * h * Ĥ₀.T)
-    Uk = exp(-1im * h * Ĥ₀.T)
-    Ux = exp(-1im * h * Ĥ₀.V)
-
-    Ψx = convert(Array{ComplexF64}, exp.(-(theta .- θ₀).^2/d^2))
-    normalize!(Ψx)
-
-    Ψk = fft(Ψx)
-
-    for i=1:steps
-        Ψk = Uk2 * Ψk
-        Ψx = ifft(Ψk)
-        Ψx = Ux * Ψx
-        Ψk = fft(Ψx)
-        Ψk = Uk2 * Ψk
-
-        normalize!(Ψk)
-    end
-
-    Ψx = ifft(Ψk)
-    normalize!(Ψx)
-
-    return Ψx
-end
-
-Ψ_ground = get_ground_state(Ĥ₀, theta_grid, 2π/16,  d=0.05, steps=10_000)
+Ψ_ground = get_ground_state(Ĥ₀, theta_grid, 2π/16,  d=0.05, steps=10_000);
 
 plot(theta_grid./(2π), V̂₀.diag./MHz, xlabel="θ/2π", ylabel="Energy (MHz)")
 _offset = minimum(V̂₀.diag./MHz)
 plot!(theta_grid./(2π), 3 .* abs2.(Ψ_ground).+_offset, label="|Ψ₀|²", xlim=(0,0.15))
-
-# ## Testing the propstep (DEBUG)
-
-# + active=""
-# #plotly()
-
-# + active=""
-# Ĥ = rotating_tai_hamiltonian(
-#     tlist=tlist,
-#     theta=theta_grid,
-#     V0=2.2MHz,
-#     m=N_sites,
-#     phi=t->0.0
-# );
-
-# + active=""
-# H_op = evalcontrols(Ĥ, IdDict(getcontrols(Ĥ)[1] => getcontrols(Ĥ)[1](0.0)));
-# plot(TAI_RADIUS.*theta_grid./(2π), H_op.V.diag/MHz, xlabel="θ/2π", ylabel="Energy (MHz)", label="V")
-# plot!(TAI_RADIUS.*theta_grid./(2π), 5 .* abs2.(Ψ_ground) .- 2.2, label="|Ψ₀|²")
-
-# + active=""
-# dt = 500*tlist[2] - tlist[1]
-
-# + active=""
-# include("./split_propagator.jl")
-
-# + active=""
-# wrk = SplitPropWrk(Ĥ, H_op, dt)
-
-# + active=""
-# Ψ = copy(Ψ_ground)
-# Ψ = splitprop!(Ψ, H_op, dt, wrk)
-
-# + active=""
-# _tlist = [0.0, dt]
-# propagator = initprop(Ψ_ground, Ĥ, _tlist; method=:splitprop)
-# Ψ = propstep!(propagator)
-# #propagator.n
-# #propagator.tlist
-
-# + active=""
-# plot(propagator.genop.V.diag)
-
-# + active=""
-# _pwc_set_genop!(propagator, 1);
-
-# + active=""
-# plot(propagator.genop.V.diag)
-
-# + active=""
-# propagator.parameters
-
-# + active=""
-# IdDict(c => propagator.parameters[c][1] for c in propagator.controls)
-
-# + active=""
-# norm(Ψ)
 
 # + active=""
 # _xshift = 0.0#1
@@ -192,7 +112,9 @@ plot!(theta_grid./(2π), 3 .* abs2.(Ψ_ground).+_offset, label="|Ψ₀|²", xlim
 
 # ## Propagation (Split Propagator)
 
-states = propagate(Ψ_ground, Ĥ, tlist; method=:splitprop, storage=true, showprogress=true);
+tlist = collect(range(0, 100ms, length=50_000));
+
+split_states = propagate(Ψ_ground, Ĥ, tlist; method=:splitprop, storage=true, showprogress=true);
 
 function plot_system(generator, states, theta_grid, tlist, n; psi_scale=5)
     t = tlist[n]
@@ -205,8 +127,8 @@ function plot_system(generator, states, theta_grid, tlist, n; psi_scale=5)
     plot!(title="t=$(t/sec)s")
 end
 
-anim = @animate for n=1:10_000:length(tlist)
-    plot_system(Ĥ, states, theta_grid, tlist, n)
+anim = @animate for n=1:1_000:length(tlist)
+    plot_system(Ĥ, split_states, theta_grid, tlist, n)
 end
 gif(anim, "anim.gif", fps=10)
 
@@ -224,7 +146,7 @@ Boost = exp.(1im .* (TAI_RADIUS^2 * Rb_mass) .* (2π/sec) .* theta_grid);
 
 Ψ_tgt = Diagonal(Boost) * Ψ_0T
 
-Ψ_T = states[:,end];
+Ψ_T = split_states[:,end];
 
 plot(theta_grid./(2π), V̂_tgt.diag./MHz, xlabel="θ/2π", ylabel="Energy (MHz)", label="V(T)")
 _offset = minimum(V̂_tgt.diag./MHz)
@@ -239,24 +161,13 @@ abs2(Ψ_tgt ⋅ Ψ_T)
 
 tlist = collect(range(0, 100ms, length=1001));
 
-cheby_states = propagate(Ψ_ground, Ĥ, tlist; method=:cheby,showprogress=true, storage=true);
+cheby_states = propagate(Ψ_ground, Ĥ, tlist; method=:cheby,showprogress=true, storage=true, specrange_method=:arnoldi);
+
+psi_cheby = cheby_states[:,end];
 
 plot(abs2.(cheby_states[:,end]))
-
-size(states)
 
 anim = @animate for n=1:10:length(tlist)
     plot_system(Ĥ, cheby_states, theta_grid, tlist, n)
 end
 gif(anim, "anim.gif", fps=10)
-
-
-
-abs2.(states[:,end] ⋅ cheby_states[:,end])
-
-real(states[:,end] ⋅ cheby_states[:,end])
-
-plot(abs2.(states[:,end]))
-plot!(abs2.(cheby_states[:,end]))
-
-
