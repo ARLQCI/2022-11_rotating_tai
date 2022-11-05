@@ -7,20 +7,22 @@
 #       extension: .jl
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.14.1
+#       jupytext_version: 1.13.0
 #   kernelspec:
-#     display_name: Julia 1.7.3
+#     display_name: Julia 1.7.2
 #     language: julia
 #     name: julia-1.7
 # ---
 
 using DrWatson
-quickactivate("/SSD/SSD/Dropbox/GITHUB_PROJECTS/JuliaQuantumControl/JuliaQuantumControl/QuantumControlBase.jl/test")
+#quickactivate("/SSD/SSD/Dropbox/GITHUB_PROJECTS/JuliaQuantumControl/JuliaQuantumControl/QuantumControlBase.jl/test")
 
 using QuantumPropagators
 using LinearAlgebra
 using FFTW
 FFTW.set_provider!("mkl")
+
+using Revise
 
 using Plots
 
@@ -37,9 +39,9 @@ const Rb_mass = 86.91Dalton;
 const TAI_RADIUS = 42μm
 const N_sites = 8;
 
-include("./rotating_tai.jl")
+includet("./rotating_tai.jl")
 
-include("./split_propagator.jl")
+includet("./split_propagator.jl")
 
 tlist = collect(range(0, 1sec, step=10μs));
 theta_grid = collect(range(0, 2π, length=2048));
@@ -83,33 +85,6 @@ Ĥ = rotating_tai_hamiltonian(
     phi=t->phi(t; w0=(2π/sec), t_r=100ms, t_loop=800ms)
 );
 
-function get_ground_state(Ĥ₀, theta, θ₀=0.0; steps=10000, d=1.0, h0=1)
-    h = -1im * h0
-    Uk2 = exp(-0.5im * h * Ĥ₀.T)
-    Uk = exp(-1im * h * Ĥ₀.T)
-    Ux = exp(-1im * h * Ĥ₀.V)
-
-    Ψx = convert(Array{ComplexF64}, exp.(-(theta .- θ₀).^2/d^2))
-    normalize!(Ψx)
-
-    Ψk = fft(Ψx)
-
-    for i=1:steps
-        Ψk = Uk2 * Ψk
-        Ψx = ifft(Ψk)
-        Ψx = Ux * Ψx
-        Ψk = fft(Ψx)
-        Ψk = Uk2 * Ψk
-
-        normalize!(Ψk)
-    end
-
-    Ψx = ifft(Ψk)
-    normalize!(Ψx)
-
-    return Ψx
-end
-
 ϕ = getcontrols(Ĥ)[1]
 Ĥ₀ = evalcontrols(Ĥ, IdDict(ϕ => 0.0))
 V̂₀ = Ĥ₀.V;
@@ -128,12 +103,8 @@ end
 
 states = propagate(Ψ_ground, Ĥ, tlist; method=:splitprop, storage=true, showprogress=true);
 
-cheby_states = propagate(Ψ_ground, Ĥ, tlist; method=:cheby, showprogress=true, storage=true);
-
-abs2.(states[:,end] ⋅ cheby_states[:,end])
-
 anim = @animate for n=1:length(tlist)÷200:length(tlist)
-    plot_system(Ĥ, cheby_states, theta_grid, tlist, n)
+    plot_system(Ĥ, states, theta_grid, tlist, n)
 end
 gif(anim, "anim.gif", fps=10)
 
@@ -159,7 +130,7 @@ function test(; dir=1, Ω=0)
     Ĥ₀ = evalcontrols(Ĥ, IdDict(ϕ => 0.0))
     V̂₀ = Ĥ₀.V;
     
-    Ψ_ground = get_ground_state(Ĥ₀, theta_grid, 2π/16,  d=0.05, steps=10_000, h0=1)
+    Ψ_ground = get_ground_state(Ĥ₀, theta_grid, 2π/16,  d=0.05, steps=10_000)
     U_boost = exp.(+1im * (TAI_RADIUS^2 * Rb_mass) * Ω * theta_grid)
     moving_Ψ_ground = U_boost .* Ψ_ground
     
@@ -197,7 +168,7 @@ function prop_squeme(; dir=1, Ω=0)
     Ĥ₀ = evalcontrols(Ĥ, IdDict(ϕ => 0.0))
     V̂₀ = Ĥ₀.V;
     
-    Ψ_ground = get_ground_state(Ĥ₀, theta_grid, 2π/16,  d=0.05, steps=10_000, h0=1)
+    Ψ_ground = get_ground_state(Ĥ₀, theta_grid, 2π/16,  d=0.05, steps=10_000)
     U_boost = exp.(+1im * (TAI_RADIUS^2 * Rb_mass) * Ω * theta_grid)
     moving_Ψ_ground = U_boost .* Ψ_ground
     
