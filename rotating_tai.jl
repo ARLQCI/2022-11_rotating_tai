@@ -106,7 +106,7 @@ end
 
 
 function getcontrols(gen::RotTAI_PotentialGenerator)
-    return (gen.phi, )
+    return getcontrols(gen.phi)
 end
 
 function evalcontrols(gen::RotTAI_PotentialGenerator, vals_dict, args...)
@@ -124,19 +124,25 @@ function evalcontrols!(
     V₀::Float64 = gen.V0
     m::Int64 = gen.m
     θ::Vector{Float64} = gen.theta
-    ϕ::Float64 = vals_dict[gen.phi]
+    ϕ::Float64 = evalcontrols(gen.phi, vals_dict, args...)
     op.diag .= V₀ .* cos.(m .* (θ .- ϕ))
     return op
 end
 
 
 function getcontrolderiv(generator::RotTAI_PotentialGenerator, control)
-    return RotTAI_PotentialDerivGenerator(
-        generator.V0,
-        generator.m,
-        generator.theta,
-        generator.phi
-    )
+    ∂ϕ = getcontrolderiv(generator.phi, control)
+    if ∂ϕ == 0
+        return nothing
+    else
+        return RotTAI_PotentialDerivGenerator(
+            generator.V0,
+            generator.m,
+            generator.theta,
+            generator.phi,
+            ∂ϕ
+        )
+    end
 end
 
 
@@ -152,7 +158,8 @@ struct RotTAI_PotentialDerivGenerator
     V0::Float64
     m::Int64
     theta::Vector{Float64}
-    phi # control
+    phi # amplitude
+    phi_deriv  # derivative of amplitude (may be 1.0)
 end
 
 
@@ -171,8 +178,9 @@ function evalcontrols!(
     V₀::Float64 = op.V0
     m::Int64 = op.m
     θ::Vector{Float64} = op.theta
-    ϕ::Float64 = vals_dict[op.phi]
-    op.diag .= -m .* V₀ .* sin.(m .* (θ .+ ϕ))
+    ϕ::Float64 = evalcontrols(op.phi, vals_dict, args...)
+    ∂ϕ::Float64 = evalcontrols(op.phi_deriv, vals_dict, args...)
+    op.diag .= -m .* V₀ .* ∂ϕ .* sin.(m .* (θ .+ ϕ))
 end
 
 
