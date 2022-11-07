@@ -2,6 +2,8 @@
 *.jl.cov
 *.jl.mem
 .ipynb_checkpoints
+/2022*.ipynb
+/*.gif
 /Manifest.toml
 /examples/dump/
 /test/Manifest.toml
