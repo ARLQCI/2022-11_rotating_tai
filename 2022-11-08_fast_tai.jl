@@ -67,8 +67,13 @@ length(tlist)
 
 println("Storage for full Hamiltonian matrix: $(sizeof(zeros(Float64, length(theta_grid), length(theta_grid))) / 1024^2) MB")
 
-function rotating_tai_hamiltonian(; tlist, theta, phi, V0=POTENTIAL_DEPTH, m=N_SITES, mass=EFFECTIVE_MASS)
-    V = RotTAI_PotentialGenerator(; V0, m, theta, phi)
+function rotating_tai_hamiltonian(;
+        tlist, theta, phi, direction=1, Omega=0.0,
+        V0=POTENTIAL_DEPTH, m=N_SITES, mass=EFFECTIVE_MASS
+)
+    V = RotTAI_PotentialGenerator(
+        ; V0, m, theta, phi, direction, Omega
+    )
     dθ = theta[2] - theta[1]
     n_theta = length(theta)
     pgrid = 2π * fftfreq(n_theta, 1 / dθ)
@@ -211,6 +216,8 @@ end
 
 plot_eigensys(Ĥ_cut, eigensys; xlim=(0.115, 0.135), ylim=(-2.2, -2.1))
 
+plot(eigensys.values./MHz, ylabel="Energy (MHz)", xlabel="eigenvalue index", legend=false)
+
 # ## Target state
 
 Ĥ_tgt = evaluate(Ĥ, tlist, length(tlist)-1);
@@ -227,7 +234,7 @@ plot!(theta_grid./π, 50 .* abs2.(Ψ_tgt).+_offset, label="|Ψ_tgt|²")
 
 # ## Propagation (Split Propagator)
 
-split_states = propagate(Ψ₀, Ĥ, tlist; method=:cheby, storage=true, showprogress=true);
+split_states = propagate(Ψ₀, Ĥ, tlist; method=:cheby, specrange_method=:arnoldi, storage=true, showprogress=true);
 
 function plot_system(generator, states, theta_grid, tlist, n; psi_scale=50)
     t = tlist[n]
@@ -255,6 +262,54 @@ plot!(theta_grid./π, 50 .* abs2.(split_states[:,end]).+_offset, label="|Ψ(T)|�
 plot!(theta_grid./π, 50 .* abs2.(Ψ_tgt).+_offset, label="|Ψ_tgt|²")
 plot!(; xlabel="θ/π", ylabel="Energy (MHz)", xlim=(0.62, 0.63))
 
+# ## Free time evolution
+
+Ψ_free = Boost' * split_states[:,end];
+
+Ĥ_free = evaluate(Ĥ, tlist, length(tlist)-1);
+
+V̂_free = Ĥ_free.V;
+
+plot(theta_grid./π, V̂_free.diag./MHz, xlabel="θ/π", ylabel="Energy (MHz)", label="V")
+_offset = minimum(V̂_free.diag./MHz)
+plot!(theta_grid./π, 50 .* abs2.(Ψ_free).+_offset, label="|Ψ|²")
+
+θ₀ = evaluate(Ĥ.V.phi, tlist, length(tlist)-1)
+
+Ψ_free_cut, theta_free = cut_grid(Ψ_free, theta_grid; θmin=(θ₀ + 0.1π), θmax=(θ₀ + 0.15π));
+
+Ĥ_free = evaluate(
+    rotating_tai_hamiltonian(
+        tlist=[0, 1.0],
+        theta=theta_free,
+        phi=[0.0,]
+    ),
+    tlist, 1
+);
+
+plot(theta_free./π, Ĥ_free.V.diag./MHz, xlabel="θ/π", ylabel="Energy (MHz)", label="V")
+_offset = minimum(V̂_free.diag./MHz)
+plot!(theta_free./π, 50 .* abs2.(Ψ_free_cut).+_offset, label="|Ψ|²")
+
+# ## Full scheme propagation
+
+function prop_scheme(t_split, phi_split; dir=1, Ω=0, V0=POTENTIAL_DEPTH, m=N_SITES, mass=EFFECTIVE_MASS)
+    tlist_split = collect(range(0, t_split, length=(Int(t_split÷ms)*1000+1)));
+    theta_grid_split = ...
+    Ĥ_split = rotating_tai_hamiltonian(;
+        tlist_split, theta_grid_split, phi_split, direction, 
+        V0, m, mass, Omega=Ω
+    )
+)
+end
+
+function eval_scheme(t_split, t_free, Ω)
+    Ψ0 = prop_squeme(;dir=1, Ω=Ω)
+    Ψ1 = prop_squeme(;dir=-1, Ω=Ω)
+    Ψup = (Ψ0 + Ψ1)
+    abs2(Ψup ⋅ Ψup)/16
+end
+
 # ## Optimization
 
 using QuantumControl
@@ -263,10 +318,10 @@ objective = Objective(initial_state=Ψ₀, target_state=Ψ_tgt, generator=Ĥ)
 
 ω = getcontrols(objective.generator)[1];
 
-problem = ControlProblem(;objectives=[objective], tlist, pulse_options=IdDict(ω => Dict(:lamba_a => 1.0, :update_shape=>(t -> 1.0))));
+problem = ControlProblem(;objectives=[objective], tlist, pulse_options=IdDict(ω => Dict(:lambda_a => 1.0, :update_shape=>(t -> 1.0))));
 
 # +
-#optimize(problem; prop_method=:cheby, method=:krotov)
+#optimize(problem; prop_method=:cheby, method=:krotov, specrange_method=:arnoldi, J_T=QuantumControl.Functionals.J_T_sm)
 # -
 
 

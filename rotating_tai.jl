@@ -2,7 +2,7 @@ using LinearAlgebra
 using QuantumPropagators
 import QuantumPropagators.Controls:
     getcontrols, evalcontrols, evalcontrols!, substitute_controls
-import QuantumControlBase: getcontrolderiv
+import QuantumControlBase: getcontrolderiv, dynamical_generator_adjoint
 
 
 #### Split Operator
@@ -35,6 +35,15 @@ function LinearAlgebra.mul!(C, A::SplitOperator, B, α, β)
     #mul!(C̃, A.T, B, α, false)
     #A.to_x!(C̃)
     #C .+= C̃
+    return C
+end
+
+
+function Base.:*(H::SplitOperator, Ψ)
+    # TODO: it would be better of have a specialized dot
+    ϕ = similar(Ψ)
+    LinearAlgebra.mul!(ϕ, H, Ψ, true, true)
+    return ϕ
 end
 
 
@@ -82,11 +91,13 @@ function substitute_controls(gen::SplitGenerator, controls_map)
     return SplitGenerator(gen.T, V, gen.to_p!, gen.to_x!)
 end
 
-function getcontrolderiv(generator::SplitGenerator, control)
+function getcontrolderiv(gen::SplitGenerator, control)
     @assert length(getcontrols(gen.T)) == 0
-    V_deriv = getcontrolderiv(generator.V, control)
+    V_deriv = getcontrolderiv(gen.V, control)
     return SplitGenerator(gen.T, V_deriv, gen.to_p!, gen.to_x!)
 end
+
+dynamical_generator_adjoint(G::SplitGenerator) = G
 
 
 #### RotTAI_PotentialGenerator
@@ -94,14 +105,19 @@ end
 
 @doc raw"""
 ```math
-V(t) = V_0 \cos(m(θ ± ϕ(t))
+V(t) = V_0 \cos(m(θ ± ϕ(t) + Ωt)
 ```
 """
-@Base.kwdef struct RotTAI_PotentialGenerator
+struct RotTAI_PotentialGenerator
     V0::Float64
     m::Int64
     theta::Vector{Float64}
     phi # control
+    Omega::Float64
+    direction::Int64
+    function RotTAI_PotentialGenerator(;V0, m, theta, phi, Omega=0.0, direction=1)
+        new(V0, m, theta, phi, Omega, direction)
+    end
 end
 
 
@@ -115,17 +131,44 @@ function evalcontrols(gen::RotTAI_PotentialGenerator, vals_dict, args...)
 end
 
 
+# Midpoint of n'th interval of tlist, but snap to beginning/end (that's
+# because any S(t) is likely exactly zero at the beginning and end, and we
+# want to use that value for the first and last time interval)
+function _t(tlist, n)
+    @assert 1 <= n <= (length(tlist) - 1)  # n is an *interval* of `tlist`
+    if n == 1
+        t = tlist[begin]
+    elseif n == length(tlist) - 1
+        t = tlist[end]
+    else
+        dt = tlist[n+1] - tlist[n]
+        t = tlist[n] + dt / 2
+    end
+    return t
+end
+
+
 function evalcontrols!(
     op::Diagonal{Float64,Vector{Float64}},
     gen::RotTAI_PotentialGenerator,
     vals_dict,
-    args...
+    tlist,
+    n
 )
     V₀::Float64 = gen.V0
     m::Int64 = gen.m
     θ::Vector{Float64} = gen.theta
-    ϕ::Float64 = evalcontrols(gen.phi, vals_dict, args...)
-    op.diag .= V₀ .* cos.(m .* (θ .- ϕ))
+    ϕ::Float64 = evalcontrols(gen.phi, vals_dict, tlist, n)
+    Ω::Float64 = gen.Omega
+    Ω_t = 0.0
+    if Ω ≠ 0.0
+        Ω_t = Ω * _t(tlist, n)
+    end
+    if gen.direction > 0
+        op.diag .= V₀ .* cos.(m .* (θ .- ϕ .+ Ω_t))
+    else
+        op.diag .= V₀ .* cos.(m .* (θ .+ ϕ .+ Ω_t))
+    end
     return op
 end
 
@@ -140,7 +183,9 @@ function getcontrolderiv(generator::RotTAI_PotentialGenerator, control)
             generator.m,
             generator.theta,
             generator.phi,
-            ∂ϕ
+            ∂ϕ,
+            generator.Omega,
+            generator.direction
         )
     end
 end
@@ -149,22 +194,19 @@ end
 #### RotTAI_PotentialDerivGenerator
 
 
-@doc raw"""
-```math
-V(t) = - m V_0 \sin(m(θ ± ϕ(t))
-```
-"""
 struct RotTAI_PotentialDerivGenerator
     V0::Float64
     m::Int64
     theta::Vector{Float64}
     phi # amplitude
-    phi_deriv  # derivative of amplitude (may be 1.0)
+    phi_deriv  # derivative of amplitude (should be 1.0)
+    Omega::Float64
+    direction::Int64
 end
 
 
 function evalcontrols(gen::RotTAI_PotentialDerivGenerator, vals_dict, args...)
-    op = Diagonal(similar(theta))
+    op = Diagonal(similar(gen.theta))
     evalcontrols!(op, gen, vals_dict, args...)
 end
 
@@ -175,12 +217,23 @@ function evalcontrols!(
     vals_dict,
     args...
 )
-    V₀::Float64 = op.V0
-    m::Int64 = op.m
-    θ::Vector{Float64} = op.theta
-    ϕ::Float64 = evalcontrols(op.phi, vals_dict, args...)
-    ∂ϕ::Float64 = evalcontrols(op.phi_deriv, vals_dict, args...)
-    op.diag .= -m .* V₀ .* ∂ϕ .* sin.(m .* (θ .+ ϕ))
+    V₀::Float64 = gen.V0
+    m::Int64 = gen.m
+    θ::Vector{Float64} = gen.theta
+    Ω::Float64 = gen.Omega
+    Ω_t = 0.0
+    if Ω ≠ 0.0
+        Ω_t = Ω * _t(tlist, n)
+    end
+    ϕ::Float64 = evalcontrols(gen.phi, vals_dict, args...)
+    ∂ϕ::Float64 = evalcontrols(gen.phi_deriv, vals_dict, args...)
+    @assert ∂ϕ == gen.phi_deriv == 1.0
+    if gen.direction > 0
+        op.diag .= -m .* V₀ .* ∂ϕ .* sin.(m .* (θ .- ϕ .+ Ω_t))
+    else
+        op.diag .= -m .* V₀ .* ∂ϕ .* sin.(m .* (θ .+ ϕ .+ Ω_t))
+    end
+    return op
 end
 
 
