@@ -211,6 +211,67 @@ plot!(theta_grid./π, 50 .* abs2.(split_states[:,end]).+_offset, label="|Ψ(T)|�
 plot!(theta_grid./π, 50 .* abs2.(Ψ_tgt).+_offset, label="|Ψ_tgt|²")
 plot!(; xlabel="θ/π", ylabel="Energy (MHz)")
 
+# ## Coordinate space representation
+
+function p_matrix(theta_grid::Vector{Float64})
+    nx::Int64 = length(theta_grid)
+    dx::Float64 = theta_grid[2] - theta_grid[1]
+    p̂ = zeros(ComplexF64, nx, nx)
+    @inbounds for i = 1:nx
+        for j = 1:nx
+            if i ≠ j
+                p̂[j, i] = ((-1)^(j - i)) / sin(π * (j-i) / nx)
+            end
+        end
+    end
+    lmul!(-1im*π / (nx * dx), p̂)
+    return Hermitian(p̂)
+end
+
+function rotating_tai_hamiltonian_coord(;
+        tlist, θ, ω, Ω=0.0, direction=1,
+        V₀=POTENTIAL_DEPTH, m=N_SITES, mass=EFFECTIVE_MASS
+)
+
+    V = Diagonal(V₀ .* cos.(m .* θ))
+
+    dθ = θ[2] - θ[1]
+    nθ = length(θ)
+    P = p_matrix(θ)
+    K = P^2 / (2 * mass)
+
+    K̃ = K - Ω * P
+
+    if ω isa Number
+        if direction == 1
+            H = K̃ + ω * P + V
+        elseif direction == -1
+            H = K̃ - ω * P + V
+        else
+            error("direction must be ±1")
+        end
+    else
+        if direction == 1
+            H = hamiltonian(K̃ + V, (P, ω))
+        elseif direction == -1
+            H = hamiltonian(K̃ + V, (-P, ω))
+        else
+            error("direction must be ±1")
+        end
+    end
+    return H
+end
+
+H_loop = rotating_tai_hamiltonian_coord(;tlist, θ=theta_grid, ω=OMEGA_TARGET, Ω=0.5/sec);
+
+eigensys = eigen(H_loop);
+
+[abs2(Ψ_tgt ⋅ eigensys.vectors[:,n]) for n ∈ 1:5]
+
+bar([abs2(Ψ_tgt ⋅ eigensys.vectors[:,n]) for n ∈ 1:length(Ψ_tgt)], xlim=(0,5))
+
+
+
 # ## Free time evolution
 
 Ψ_free = split_states[:,end];
@@ -223,6 +284,8 @@ plot(theta_grid./π, V̂_free.diag./MHz, xlabel="θ/π", ylabel="Energy (MHz)", 
 _offset = minimum(V̂_free.diag./MHz)
 plot!(theta_grid./π, 50 .* abs2.(Ψ_free).+_offset, label="|Ψ|²")
 
+# ### With Chebychev propagation
+
 split_states_free = propagate(
     Ψ_free, Ĥ_free,
     collect(range(0, 800ms, length=101));
@@ -233,6 +296,26 @@ split_states_free = propagate(
 plot(abs2.(split_states_free[:,end]))
 
 split_states_free[:,begin] ⋅ split_states_free[:,end]
+
+angle(split_states_free[:,begin] ⋅ split_states_free[:,end]) / π
+
+# ### Via diagonalization
+
+function free_time_evolution(Ψ::Vector{ComplexF64}, H::AbstractMatrix, Δt::Float64)
+    eigensys = eigen(H)
+    U = eigensys.vectors
+    λ = eigensys.values
+    Ψ_out = U * (exp.(-1im .* λ .* Δt) .* (U' * Ψ))
+    return Ψ_out
+end
+
+H_loop = rotating_tai_hamiltonian_coord(;tlist, θ=theta_grid, ω=OMEGA_TARGET);
+
+Ψ_free_out = free_time_evolution(Ψ_free, H_loop, 800ms);
+
+split_states_free[:,begin] ⋅ Ψ_free_out
+
+angle(split_states_free[:,begin] ⋅ Ψ_free_out) / π
 
 # ## Full scheme propagation
 
@@ -250,8 +333,10 @@ function prop_scheme(;ω₀, θ, t_r, t_loop, dir=1, Ω=0.0, V0=POTENTIAL_DEPTH,
     Ψ = propagate(Ψ₀, Ĥ_ramp_up, tlist_ramp_up; method=:splitprop, specrange_method, show_progress=true)
     
     tlist_loop = collect(range(t_r, t_r + t_loop, length=101))
-    Ĥ_loop = rotating_tai_hamiltonian(;tlist=tlist_loop, θ, Ω, ω=(dir > 0 ? ω₀ : -ω₀))
-    Ψ = propagate(Ψ, Ĥ_loop, tlist_loop; method=:cheby, specrange_method, show_progress=true)
+    #Ĥ_loop = rotating_tai_hamiltonian(;tlist=tlist_loop, θ, Ω, ω=(dir > 0 ? ω₀ : -ω₀))
+    #Ψ = propagate(Ψ, Ĥ_loop, tlist_loop; method=:cheby, specrange_method, show_progress=true)
+    Ĥ_loop = rotating_tai_hamiltonian_coord(;tlist=tlist_loop, θ, Ω, ω=(dir > 0 ? ω₀ : -ω₀))
+    Ψ = free_time_evolution(Ψ_free, Ĥ_loop, t_loop)
     
     tlist_ramp_down = collect(range(t_r + t_loop, 2*t_r + t_loop, length=length(tlist_ramp_up)))
     Ĥ_ramp_down = rotating_tai_hamiltonian(;
@@ -266,7 +351,7 @@ function eval_scheme(;ω₀, θ, t_r, t_loop, Ω)
     Ψ0 = Threads.@spawn prop_scheme(;ω₀, θ, t_r, t_loop, dir=1, Ω=Ω)
     Ψ1 = Threads.@spawn prop_scheme(;ω₀, θ, t_r, t_loop, dir=-1, Ω=Ω)
     Ψup = (fetch(Ψ0) + fetch(Ψ1))
-    abs2(Ψup ⋅ Ψup)/16
+    sqrt(abs2(Ψup ⋅ Ψup)/16)
 end
 
 Ω_list = collect(range(0, 0.5/sec, length=41));
@@ -283,3 +368,8 @@ end
 P_list = scan_Ω(Ω_list)
 
 plot(Ω_list / (1/sec), P_list, xlabel="Ω (1/sec)", legend=false)
+#plot!(Ω_list / (1/sec), cos.(12 .* Ω_list ./ (1 / sec)).^4)
+
+plot(Ω_list / (1/sec), P_list, xlabel="Ω (1/sec)", legend=false)
+
+
