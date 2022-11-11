@@ -1,5 +1,6 @@
 using LinearAlgebra
 using QuantumPropagators
+using QuantumPropagators: Operator, Generator
 import QuantumPropagators.Controls:
     getcontrols, evalcontrols, evalcontrols!, substitute_controls
 import QuantumControlBase: getcontrolderiv, dynamical_generator_adjoint
@@ -47,6 +48,13 @@ function Base.:*(H::SplitOperator, Ψ)
 end
 
 
+getcontrols(::SplitOperator) = ( );
+
+evalcontrols(O::SplitOperator, args...) = O;
+
+evalcontrols!(O::SplitOperator, H::SplitOperator, args...) = O;
+
+
 #### Split Generator
 
 
@@ -67,18 +75,33 @@ struct SplitGenerator
 end
 
 function getcontrols(gen::SplitGenerator)
-    @assert length(getcontrols(gen.T)) == 0
-    return getcontrols(gen.V)
+    return (getcontrols(gen.T)..., getcontrols(gen.V)...)
 end
 
 function evalcontrols(gen::SplitGenerator, args...)
-    SplitOperator(
-        evalcontrols(gen.T, args...),
-        evalcontrols(gen.V, args...),
-        gen.to_p!,
-        gen.to_x!
-    )
+    T̂ = evalcontrols(gen.T, args...)
+    if T̂ isa Operator
+        @assert (length(T̂.ops) == 2) && (length(T̂.coeffs) == 1)
+        T̂ = T̂.ops[1] + T̂.coeffs[1] * T̂.ops[2]
+    end
+    V̂ = evalcontrols(gen.V, args...)
+    SplitOperator(T̂, V̂, gen.to_p!, gen.to_x!)
 end
+
+
+function evalcontrols!(
+    op::Diagonal{Float64, Vector{Float64}},
+    gen::Generator{Diagonal{Float64, AbstractVector{Float64}}, Vector{Float64}},
+    vals_dict,
+    tlist::Vector{Float64},
+    n::Int64
+)
+    @assert (length(gen.ops) == 2) && (length(gen.amplitudes) == 1)
+    op.diag .= gen.ops[1].diag
+    val = vals_dict[gen.amplitudes[1]]
+    op.diag .= op.diag .+ val .* gen.ops[2].diag
+end
+
 
 function evalcontrols!(op::SplitOperator, gen::SplitGenerator, args...)
     evalcontrols!(op.T, gen.T, args...)
