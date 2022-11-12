@@ -55,6 +55,7 @@ const RUBIDIUM_MASS = 86.91Dalton;
 const TAI_RADIUS = 42μm
 const N_SITES = 8;
 const SEPARATION_TIME = 100ms;
+const LOOP_TIME = 900ms;
 const OMEGA_TARGET = 2π / sec;
 const EFFECTIVE_MASS = TAI_RADIUS^2 * RUBIDIUM_MASS;
 const POTENTIAL_DEPTH = 2.2MHz;
@@ -308,7 +309,7 @@ end
 
 H_loop = rotating_tai_hamiltonian_coord(; tlist, θ=theta_grid, ω=OMEGA_TARGET);
 
-Ψ_free_out = free_time_evolution(Ψ_free, H_loop, 900ms);
+Ψ_free_out = free_time_evolution(Ψ_free, H_loop, LOOP_TIME);
 
 # ## Full scheme propagation
 
@@ -398,7 +399,7 @@ function angular_displacement(; ω₀, t_r, t_loop)
     return Φ
 end
 
-angular_displacement(ω₀=OMEGA_TARGET,t_r=SEPARATION_TIME, t_loop=900ms) / π ###
+angular_displacement(ω₀=OMEGA_TARGET,t_r=SEPARATION_TIME, t_loop=LOOP_TIME) / π ###
 
 surface_pop(Ψ) = norm(Ψ)^2
 
@@ -423,9 +424,9 @@ function eval_scheme(; ω₀, θ, t_r, t_loop, Ω)
     return surface_pop(Ψright)
 end
 
-eval_scheme(ω₀=OMEGA_TARGET, θ=theta_grid, t_r=SEPARATION_TIME, t_loop=900ms, Ω=0.0)
+eval_scheme(ω₀=OMEGA_TARGET, θ=theta_grid, t_r=SEPARATION_TIME, t_loop=LOOP_TIME, Ω=0.0)
 
-angular_displacement(ω₀=OMEGA_TARGET,t_r=SEPARATION_TIME, t_loop=900ms) / π
+angular_displacement(ω₀=OMEGA_TARGET,t_r=SEPARATION_TIME, t_loop=LOOP_TIME) / π
 
 function scan_Ω(Ω_list)
     P_list = Float64[]
@@ -434,7 +435,7 @@ function scan_Ω(Ω_list)
             ω₀=OMEGA_TARGET,
             θ=theta_grid,
             t_r=SEPARATION_TIME,
-            t_loop=900ms,
+            t_loop=LOOP_TIME,
             Ω
         )
         push!(P_list, P)
@@ -446,3 +447,24 @@ end
 P_list = scan_Ω(Ω_list)
 
 plot(Ω_list / (1 / sec), P_list, xlabel="Ω (1/sec)", legend=false)
+
+function sagnac_phase(Ω, ; Φ, R=TAI_RADIUS, m=RUBIDIUM_MASS)
+    A = (R^2/2) * Φ
+    return 4π * m * Ω * A
+end
+
+function sagnac_population(
+        Ω_list; R=TAI_RADIUS, m=RUBIDIUM_MASS, ω₀=OMEGA_TARGET, t_r=SEPARATION_TIME, t_loop=LOOP_TIME,
+        α = 1.0
+    )
+    # α is a correction factor, should be 1.0
+    Φ = angular_displacement(;ω₀, t_r, t_loop)
+    ΔΦ = sagnac_phase.(Ω_list; Φ, R, m)
+    return sin.(α * ΔΦ / 2).^2
+end
+
+plot(Ω_list / (1 / sec), P_list, xlabel="Ω (1/sec)", label="simulation", legend=:outertop)
+plot!(Ω_list / (1 / sec), sagnac_population(Ω_list; α=1.0), label="sagnac")
+plot!(Ω_list / (1 / sec), sagnac_population(Ω_list; α=0.2867406229205808), label="sagnac (α=0.2867406229205808)") # XXX: α from fit
+plot!(Ω_list / (1 / sec), sagnac_population(Ω_list; α=(1/π)), label="sagnac (α=1/π)")
+plot!(;size=(600,450))
