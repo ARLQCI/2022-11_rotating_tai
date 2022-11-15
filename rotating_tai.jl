@@ -102,6 +102,19 @@ function evalcontrols!(
     op.diag .= op.diag .+ val .* gen.ops[2].diag
 end
 
+function evalcontrols!(
+    op::Diagonal{Float64, Vector{Float64}},
+    gen::Generator{Diagonal{Float64, Vector{Float64}}, Vector{Float64}},
+    vals_dict,
+    tlist::Vector{Float64},
+    n::Int64
+)
+    @assert (length(gen.ops) == 2) && (length(gen.amplitudes) == 1)
+    op.diag .= gen.ops[1].diag
+    val = vals_dict[gen.amplitudes[1]]
+    op.diag .= op.diag .+ val .* gen.ops[2].diag
+end
+
 
 function evalcontrols!(op::SplitOperator, gen::SplitGenerator, args...)
     evalcontrols!(op.T, gen.T, args...)
