@@ -14,7 +14,7 @@
 #     name: julia-1.8-multithread
 # ---
 
-# # Rotating TAI with ω(t) - fast splitting in the moving frame
+# # Rotating TAI with ω(t) - superfast splitting in the moving frame
 
 # Here, we use $\omega(t)$ as the control field and $\phi(t) = \int \omega(t) dt$ as the control amplitude.
 #
@@ -25,6 +25,8 @@
 # = -\frac{\hbar^2}{2mR^2}\frac{\partial^2}{\partial \theta^2} + V_0 \cos\left(m \theta\right) + i \hbar \omega_{\pm}(t) \frac{\partial}{\partial \theta}
 # = \left((\hat{T} - \Omega \, \hat{p})  \mp \omega(t) \, \hat{p}\right) + \hat{V}
 # \end{equation}
+#
+# The parameters in this notebook are considerably non-adiabatic
 
 # ## Hamiltonian
 
@@ -54,9 +56,9 @@ const Dalton = 1.5746097504353806e+01;
 const RUBIDIUM_MASS = 86.91Dalton;
 const TAI_RADIUS = 42μm
 const N_SITES = 8;
-const SEPARATION_TIME = 10ms;
+const SEPARATION_TIME = 1ms;
 const LOOP_TIME = 900ms;
-const OMEGA_TARGET = 200π / sec;
+const OMEGA_TARGET = 1000π / sec;
 const EFFECTIVE_MASS = TAI_RADIUS^2 * RUBIDIUM_MASS;
 const POTENTIAL_DEPTH = 2.2MHz;
 
@@ -66,7 +68,7 @@ includet("./rotating_tai.jl")
 includet("./split_propagator.jl")
 
 tlist = collect(range(0, SEPARATION_TIME, length=(Int(SEPARATION_TIME ÷ ms) * 1000 + 1)));
-theta_grid = collect(range(0, 0.25π, length=2048));
+theta_grid = collect(range(0, 0.25π, length=4096));
 
 length(tlist)
 
@@ -267,9 +269,9 @@ function plot_system(generator, states, theta_grid, tlist, n; psi_target=nothing
     plot!(;title="t=$(t/ms)ms", kwargs...)
 end
 
-plot(theta_grid ./ π, real.(Ψ_tgt), label="tgt")
-plot!(theta_grid ./ π, real.(split_states[:,end]), label="Ψ")
-plot!(; xlim=(0.12, 0.13), ylim=(-0.5, 0.5))
+plot(theta_grid ./ π, abs2.(Ψ_tgt), label="tgt")
+plot!(theta_grid ./ π, abs2.(split_states[:,end]), label="Ψ")
+plot!(; xlim=(0.12, 0.13))
 
 anim = @animate for n = 1:(length(tlist)÷100):length(tlist)
     plot_system(Ĥ, split_states, theta_grid, tlist, n; xlim=(0.12, 0.13), ylim=(-20.0, 20.0), psi_target=Ψ_tgt)
@@ -330,7 +332,7 @@ function prop_scheme(;
         θ,
         Ω,
         ω=discretize_on_midpoints(t -> omega_ramp_up(t; w0=ω₀, t_r=t_r), tlist_ramp_up),
-        direction=dir,
+        direction=dir
     )
     #t_loop = ...
 
@@ -339,7 +341,7 @@ function prop_scheme(;
         θ,
         Ω,
         ω=ω₀,
-        direction=dir,
+        direction=dir
     )
 
     tlist_ramp_down =
@@ -352,7 +354,7 @@ function prop_scheme(;
             t -> omega_ramp_down(t - t_r - t_loop; w0=ω₀, t_r=t_r),
             tlist_ramp_down
         ),
-        direction=dir,
+        direction=dir
     )
 
     Ψ = propagate(Ψ₀, Ĥ_ramp_up, tlist_ramp_up; method=:splitprop, specrange_method)
@@ -420,6 +422,8 @@ end
 
 eval_scheme(ω₀=OMEGA_TARGET, θ=theta_grid, t_r=SEPARATION_TIME, t_loop=LOOP_TIME, Ω=0.0)
 
+eval_scheme(ω₀=OMEGA_TARGET, θ=theta_grid, t_r=SEPARATION_TIME, t_loop=LOOP_TIME, Ω=0.005/sec)
+
 angular_displacement(ω₀=OMEGA_TARGET,t_r=SEPARATION_TIME, t_loop=LOOP_TIME) / π
 
 function scan_Ω(Ω_list)
@@ -437,10 +441,12 @@ function scan_Ω(Ω_list)
     return P_list
 end
 
-Ω_list = collect(range(0, 0.005 / sec, length=41))
+Ω_list = collect(range(0, 0.001 / sec, length=41))
 P_list = scan_Ω(Ω_list)
 
 plot(Ω_list / (1 / sec), P_list, xlabel="Ω (1/sec)", legend=false)
+
+plot(Ω_list / (1 / sec), P_list, xlabel="Ω (1/sec)", legend=false, ylim=(0, 1))
 
 function sagnac_phase(Ω, ; Φ, R=TAI_RADIUS, m=RUBIDIUM_MASS)
     A = (R^2/2) * Φ

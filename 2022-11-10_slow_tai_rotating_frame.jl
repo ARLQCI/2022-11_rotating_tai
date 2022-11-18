@@ -96,21 +96,21 @@ function rotating_tai_hamiltonian(;
     ifft_op = plan_ifft!(_Ψ)
     transforms = (Ψ -> fft_op * Ψ, Ψ -> ifft_op * Ψ)
 
-    K̃ = K - Ω * P
+    K′ = K - Ω * P
 
     if ω isa Number
         if direction == 1
-            H = SplitGenerator(K̃ + ω * P, V, transforms...)
+            H = SplitGenerator(K′ + ω * P, V, transforms...)
         elseif direction == -1
-            H = SplitGenerator(K̃ - ω * P, V, transforms...)
+            H = SplitGenerator(K′ - ω * P, V, transforms...)
         else
             error("direction must be ±1")
         end
     else
         if direction == 1
-            H = SplitGenerator(hamiltonian(K̃, (P, ω)), V, transforms...)
+            H = SplitGenerator(hamiltonian(K′, (P, ω)), V, transforms...)
         elseif direction == -1
-            H = SplitGenerator(hamiltonian(K̃, (-P, ω)), V, transforms...)
+            H = SplitGenerator(hamiltonian(K′, (-P, ω)), V, transforms...)
         else
             error("direction must be ±1")
         end
@@ -411,7 +411,8 @@ function prop_scheme(;
         tlist=tlist_ramp_up,
         θ,
         Ω,
-        ω=discretize_on_midpoints(t -> omega_ramp_up(t; w0=ω₀, t_r=t_r), tlist_ramp_up)
+        ω=discretize_on_midpoints(t -> omega_ramp_up(t; w0=ω₀, t_r=t_r), tlist_ramp_up),
+        direction=dir,
     )
     #t_loop = ...
 
@@ -419,7 +420,8 @@ function prop_scheme(;
         tlist=[t_r, t_r + t_loop],
         θ,
         Ω,
-        ω=(dir > 0 ? ω₀ : -ω₀)
+        ω=ω₀,
+        direction=dir
     )
 
     tlist_ramp_down =
@@ -431,7 +433,8 @@ function prop_scheme(;
         ω=discretize_on_midpoints(
             t -> omega_ramp_down(t - t_r - t_loop; w0=ω₀, t_r=t_r),
             tlist_ramp_down
-        )
+        ),
+        direction=dir
     )
 
     Ψ = propagate(Ψ₀, Ĥ_ramp_up, tlist_ramp_up; method=:splitprop, specrange_method)
@@ -462,13 +465,13 @@ function angular_displacement(; ω₀, t_r, t_loop)
     Φ_loop = t_loop * ω₀
     Φ_down = sum(ω_down) * dt_down
     Φ = Φ_up + Φ_loop + Φ_down
-    
+
     Φtgt = round(Φ / π) * π
     t_loop_opt = (Φtgt - (Φ_up + Φ_down)) / ω₀
     if abs(t_loop - t_loop_opt) > 1e-8
         @warn("angular displacement not aligned. Change t_loop to $(t_loop_opt/ms)ms")
     end
-    
+
     return Φ
 end
 
@@ -523,21 +526,18 @@ plot(Ω_list / (1 / sec), P_list, xlabel="Ω (1/sec)", legend=false)
 
 function sagnac_phase(Ω, ; Φ, R=TAI_RADIUS, m=RUBIDIUM_MASS)
     A = (R^2/2) * Φ
-    return 4π * m * Ω * A
+    return 4 * m * Ω * A
 end
 
 function sagnac_population(
-        Ω_list; R=TAI_RADIUS, m=RUBIDIUM_MASS, ω₀=OMEGA_TARGET, t_r=SEPARATION_TIME, t_loop=LOOP_TIME,
-        α = 1.0
+        Ω_list; R=TAI_RADIUS, m=RUBIDIUM_MASS, ω₀=OMEGA_TARGET, t_r=SEPARATION_TIME, t_loop=LOOP_TIME
     )
     # α is a correction factor, should be 1.0
     Φ = angular_displacement(;ω₀, t_r, t_loop)
     ΔΦ = sagnac_phase.(Ω_list; Φ, R, m)
-    return sin.(α * ΔΦ / 2).^2
+    return sin.(ΔΦ / 2).^2
 end
 
 plot(Ω_list / (1 / sec), P_list, xlabel="Ω (1/sec)", label="simulation", legend=:outertop)
-#plot!(Ω_list / (1 / sec), sagnac_population(Ω_list; α=1.0), label="sagnac")
-#plot!(Ω_list / (1 / sec), sagnac_population(Ω_list; α=0.2867406229205808), label="sagnac (α=0.2867406229205808)") # XXX: α from fit
-plot!(Ω_list / (1 / sec), sagnac_population(Ω_list; α=(1/2π)), label="sagnac (α=1/π)")
+plot!(Ω_list / (1 / sec), sagnac_population(Ω_list), label="sagnac")
 plot!(;size=(600,450))

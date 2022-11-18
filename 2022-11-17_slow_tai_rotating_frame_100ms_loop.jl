@@ -14,7 +14,7 @@
 #     name: julia-1.8-multithread
 # ---
 
-# # Rotating TAI with ω(t) - fast splitting in the moving frame
+# # Rotating TAI with ω(t) - adiabatic splitting in the moving frame
 
 # Here, we use $\omega(t)$ as the control field and $\phi(t) = \int \omega(t) dt$ as the control amplitude.
 #
@@ -25,6 +25,8 @@
 # = -\frac{\hbar^2}{2mR^2}\frac{\partial^2}{\partial \theta^2} + V_0 \cos\left(m \theta\right) + i \hbar \omega_{\pm}(t) \frac{\partial}{\partial \theta}
 # = \left((\hat{T} - \Omega \, \hat{p})  \mp \omega(t) \, \hat{p}\right) + \hat{V}
 # \end{equation}
+#
+# This notebook uses an alternative set of parameters for a fully adiabatic scheme (presumably, the parameters used in the current manuscript)
 
 # ## Hamiltonian
 
@@ -54,9 +56,9 @@ const Dalton = 1.5746097504353806e+01;
 const RUBIDIUM_MASS = 86.91Dalton;
 const TAI_RADIUS = 42μm
 const N_SITES = 8;
-const SEPARATION_TIME = 10ms;
-const LOOP_TIME = 900ms;
-const OMEGA_TARGET = 200π / sec;
+const SEPARATION_TIME = 100ms;
+const LOOP_TIME = 100ms;
+const OMEGA_TARGET = 10π / sec;
 const EFFECTIVE_MASS = TAI_RADIUS^2 * RUBIDIUM_MASS;
 const POTENTIAL_DEPTH = 2.2MHz;
 
@@ -66,7 +68,7 @@ includet("./rotating_tai.jl")
 includet("./split_propagator.jl")
 
 tlist = collect(range(0, SEPARATION_TIME, length=(Int(SEPARATION_TIME ÷ ms) * 1000 + 1)));
-theta_grid = collect(range(0, 0.25π, length=2048));
+theta_grid = collect(range(0, 0.25π, length=512));
 
 length(tlist)
 
@@ -237,9 +239,7 @@ norm(Ψ_tgt - Ψ₀)
 
 norm(abs2.(Ψ_tgt) - abs2.(Ψ₀))
 
-plot(theta_grid ./ π, real.(Ψ_tgt), marker=true, xlim=(0.115, 0.135))
-
-plot(theta_grid ./ π, real.(Ψ₀) - real.(Ψ_tgt), marker=true,  xlim=(0.115, 0.135))
+plot(theta_grid ./ π, real.(Ψ₀) - real.(Ψ_tgt), marker=true)
 
 # ## Propagation (Split Propagator)
 
@@ -247,13 +247,13 @@ split_states = propagate(
     Ψ₀,
     Ĥ,
     tlist;
-    method=:splitprop,
+    method=:cheby,
     specrange_method=:arnoldi,
     storage=true,
     showprogress=true
 );
 
-function plot_system(generator, states, theta_grid, tlist, n; psi_target=nothing, psi_scale=50, kwargs...)
+function plot_system(generator, states, theta_grid, tlist, n; psi_scale=50)
     t = tlist[n]
     Ĥ = generator
     V = evaluate(Ĥ, tlist, min(n, length(tlist) - 1)).V.diag
@@ -261,24 +261,108 @@ function plot_system(generator, states, theta_grid, tlist, n; psi_target=nothing
     Ψ = states[:, n]
     fig = plot(theta_grid ./ π, V / MHz, xlabel="θ/π", ylabel="Energy (MHz)", label="V")
     plot!(fig, theta_grid ./ π, psi_scale * abs2.(Ψ) .+ offset, label="|Ψ|²")
-    if !isnothing(psi_target)
-        plot!(fig, theta_grid ./ π, psi_scale * abs2.(psi_target) .+ offset, label="tgt")
-    end
-    plot!(;title="t=$(t/ms)ms", kwargs...)
+    plot!(title="t=$(t/ms)ms")
 end
 
-plot(theta_grid ./ π, real.(Ψ_tgt), label="tgt")
-plot!(theta_grid ./ π, real.(split_states[:,end]), label="Ψ")
-plot!(; xlim=(0.12, 0.13), ylim=(-0.5, 0.5))
-
 anim = @animate for n = 1:(length(tlist)÷100):length(tlist)
-    plot_system(Ĥ, split_states, theta_grid, tlist, n; xlim=(0.12, 0.13), ylim=(-20.0, 20.0), psi_target=Ψ_tgt)
+    plot_system(Ĥ, split_states, theta_grid, tlist, n)
 end
 gif(anim, "anim.gif", fps=10)
 
 abs2(split_states[:, end] ⋅ Ψ_tgt)
 
 angle(split_states[:, end] ⋅ Ψ_tgt) / π
+
+# ## Propagation on Second Surface
+
+Ĥ_down = rotating_tai_hamiltonian(
+    tlist=tlist,
+    θ=theta_grid,
+    ω=discretize_on_midpoints(omega_ramp_up, tlist),
+    direction=-1,
+);
+
+plot(getcontrols(Ĥ_down.T)[1])
+
+split_states_down = propagate(
+    Ψ₀,
+    Ĥ_down,
+    tlist;
+    method=:cheby,
+    specrange_method=:arnoldi,
+    storage=true,
+    showprogress=true
+);
+
+Ψ_tgt_down = get_ground_state(; θ=theta_grid, ω=-OMEGA_TARGET);
+
+abs2(split_states_down[:, end] ⋅ Ψ_tgt_down)
+
+angle(split_states_down[:, end] ⋅ Ψ_tgt_down) / π
+
+# ## Splitting and immediate recombination
+
+# +
+"""Propagate Ψ₀ defined on a single surface.
+
+Ψ₀ may or may not be normalized. In general, the population on the surface,
+‖Ψ₀‖², is preserved.
+"""
+function prop_ramp_up_ramp_down(;
+    Ψ₀,
+    ω₀,
+    θ,
+    t_r,
+    dir=1,
+    Ω=0.0,
+    V0=POTENTIAL_DEPTH,
+    m=N_SITES,
+    mass=EFFECTIVE_MASS
+)
+    t_loop = 0.0
+
+    specrange_method = :arnoldi
+    tlist_ramp_up = collect(range(0, t_r, length=(Int(t_r ÷ ms) * 1000 + 1)))
+    Ĥ_ramp_up = rotating_tai_hamiltonian(;
+        tlist=tlist_ramp_up,
+        θ,
+        Ω,
+        ω=discretize_on_midpoints(t -> omega_ramp_up(t; w0=ω₀, t_r=t_r), tlist_ramp_up),
+        direction=dir,
+    )
+    #t_loop = ...
+
+    tlist_ramp_down =
+        collect(range(t_r + t_loop, 2 * t_r + t_loop, length=length(tlist_ramp_up)))
+    Ĥ_ramp_down = rotating_tai_hamiltonian(;
+        tlist=tlist_ramp_down,
+        θ,
+        Ω,
+        ω=discretize_on_midpoints(
+            t -> omega_ramp_down(t - t_r - t_loop; w0=ω₀, t_r=t_r),
+            tlist_ramp_down
+        ),
+        direction=dir,
+    )
+
+    Ψ = propagate(Ψ₀, Ĥ_ramp_up, tlist_ramp_up; method=:splitprop, specrange_method)
+    Ψ = propagate(Ψ, Ĥ_ramp_down, tlist_ramp_down; method=:splitprop, specrange_method)
+    return Ψ
+
+end
+# -
+
+Ψ_up_down1 = prop_ramp_up_ramp_down(;Ψ₀, ω₀=OMEGA_TARGET, θ=theta_grid, t_r=SEPARATION_TIME, dir=1);
+
+angle(Ψ_up_down1 ⋅ Ψ₀) / π
+
+abs2(Ψ_up_down1 ⋅ Ψ₀)
+
+Ψ_up_down2 = prop_ramp_up_ramp_down(;Ψ₀, ω₀=OMEGA_TARGET, θ=theta_grid, t_r=SEPARATION_TIME, dir=-1);
+
+angle(Ψ_up_down2 ⋅ Ψ₀) / π
+
+abs2(Ψ_up_down2 ⋅ Ψ₀)
 
 # ## Free time evolution
 
@@ -437,7 +521,7 @@ function scan_Ω(Ω_list)
     return P_list
 end
 
-Ω_list = collect(range(0, 0.005 / sec, length=41))
+Ω_list = collect(range(0, 0.5 / sec, length=41))
 P_list = scan_Ω(Ω_list)
 
 plot(Ω_list / (1 / sec), P_list, xlabel="Ω (1/sec)", legend=false)
