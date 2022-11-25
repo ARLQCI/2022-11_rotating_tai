@@ -24,7 +24,7 @@ end
 
 
 function splitprop!(Ψ, H::SplitOperator, dt, wrk; _...)
-    @assert dt ≈ wrk.dt
+    @assert abs(dt) ≈ abs(wrk.dt) "|dt=$dt| ≉ |wrk.dt=$(wrk.dt)|"
     T = H.T
     V = H.V
     if !wrk.T_is_static
@@ -63,7 +63,7 @@ set_t!(propagator::SplitPropagator, t) = _pwc_set_t!(propagator, t)
 
 function initprop(
     state,
-    generator::SplitGenerator,
+    generator,
     tlist,
     method::Val{:splitprop};
     inplace=true,
@@ -72,6 +72,7 @@ function initprop(
     parameters=nothing,
     _...
 )
+    generator::SplitGenerator
     tlist = convert(Vector{Float64}, tlist)
     controls = getcontrols(generator)
     G::SplitOperator = _pwc_get_max_genop(generator, controls, tlist)

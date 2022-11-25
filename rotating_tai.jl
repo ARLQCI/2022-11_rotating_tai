@@ -13,15 +13,26 @@ import QuantumControlBase: getcontrolderiv, dynamical_generator_adjoint
 #
 # * mul!
 
-struct SplitOperator
-    T::Diagonal{Float64,Vector{Float64}}
-    V::Diagonal{Float64,Vector{Float64}}
+struct SplitOperator{TT,TV}
+    T::TT
+    V::TV
     to_p!::Function # coord to momentum
     to_x!::Function # momentum to coord
+    function SplitOperator(T, V, to_p!, to_x!)
+        T::Union{Nothing, Diagonal{Float64,Vector{Float64}}}
+        V::Union{Nothing, Diagonal{Float64,Vector{Float64}}}
+        # ishermitian depends on these type-asserts
+        new{typeof(T),typeof(V)}(T, V, to_p!, to_x!)
+    end
 end
 
 
-Base.size(O::SplitOperator) = size(O.V)
+Base.size(O::SplitOperator{TT,VT}) where {TT,VT} = size(O.T)
+Base.size(O::SplitOperator{Nothing, VT}) where {VT} = size(O.V)
+Base.size(O::SplitOperator{Nothing,Nothing}) = 0
+
+
+LinearAlgebra.ishermitian(o::SplitOperator) = true
 
 
 function LinearAlgebra.mul!(C, A::SplitOperator, B, α, β)
@@ -32,18 +43,34 @@ function LinearAlgebra.mul!(C, A::SplitOperator, B, α, β)
     mul!(C, A.T, B, α, true)
     A.to_x!(B)
     A.to_x!(C)
-    #C̃ = similar(C)
-    #mul!(C̃, A.T, B, α, false)
-    #A.to_x!(C̃)
-    #C .+= C̃
     return C
+end
+
+# Potential only
+function LinearAlgebra.mul!(C, A::SplitOperator{Nothing, TV}, B, α, β) where {TV}
+    mul!(C, A.V, B, α, β)
+end
+
+# Momentum space operator only
+function LinearAlgebra.mul!(C, A::SplitOperator{TT, Nothing}, B, α, β) where {TT}
+    A.to_p!(B)
+    A.to_p!(C)
+    mul!(C, A.T, B, α, β)
+    A.to_x!(B)
+    A.to_x!(C)
+    return C
+end
+
+# Zero operator
+function LinearAlgebra.mul!(C, A::SplitOperator{Nothing, Nothing}, B, α, β)
+    lmul!(β, C)
 end
 
 
 function Base.:*(H::SplitOperator, Ψ)
     # TODO: it would be better of have a specialized dot
     ϕ = similar(Ψ)
-    LinearAlgebra.mul!(ϕ, H, Ψ, true, true)
+    LinearAlgebra.mul!(ϕ, H, Ψ, true, false)
     return ϕ
 end
 
@@ -75,68 +102,109 @@ struct SplitGenerator
 end
 
 function getcontrols(gen::SplitGenerator)
-    return (getcontrols(gen.T)..., getcontrols(gen.V)...)
+    if !isnothing(gen.T) && !isnothing(gen.V)
+        return (getcontrols(gen.T)..., getcontrols(gen.V)...)
+    elseif isnothing(gen.T) && !isnothing(gen.V)
+        return getcontrols(gen.V)
+    elseif !isnothing(gen.T) && isnothing(gen.V)
+        return getcontrols(gen.T)
+    else
+        return ()
+    end
 end
 
 function evalcontrols(gen::SplitGenerator, args...)
-    T̂ = evalcontrols(gen.T, args...)
+    T̂ = isnothing(gen.T) ? nothing : evalcontrols(gen.T, args...)
     if T̂ isa Operator
-        @assert (length(T̂.ops) == 2) && (length(T̂.coeffs) == 1)
-        T̂ = T̂.ops[1] + T̂.coeffs[1] * T̂.ops[2]
+        # SplitOperator can only have a "Diagonal" matrix. If we get a general
+        # operator, we have to sum it into a single operator
+        if (length(T̂.ops) == 2) && (length(T̂.coeffs) == 1)
+            T̂ = T̂.ops[1] + T̂.coeffs[1] * T̂.ops[2]
+        elseif (length(T̂.ops) == 1) && (length(T̂.coeffs) == 1)
+            T̂ = T̂.coeffs[1] * T̂.ops[1]
+        else
+            error("Not implemented")
+        end
     end
-    V̂ = evalcontrols(gen.V, args...)
+    V̂ = isnothing(gen.V) ? nothing : evalcontrols(gen.V, args...)
     SplitOperator(T̂, V̂, gen.to_p!, gen.to_x!)
 end
 
 
 function evalcontrols!(
     op::Diagonal{Float64, Vector{Float64}},
-    gen::Generator{Diagonal{Float64, AbstractVector{Float64}}, Vector{Float64}},
+    gen::Generator{Diagonal{Float64, AbstractVector{Float64}}, CT},
     vals_dict,
     tlist::Vector{Float64},
     n::Int64
-)
+   ) where {CT}
+    # TODO: remove this method
+    @error("Diagonal over AbstractVector. Make sure everything is Vector{Float64}")
+    # You probably need to convert `fftfreq` from `Frequencies` to `Vector`
     @assert (length(gen.ops) == 2) && (length(gen.amplitudes) == 1)
     op.diag .= gen.ops[1].diag
-    val = vals_dict[gen.amplitudes[1]]
+    val = evalcontrols(gen.amplitudes[1], vals_dict, tlist, n)
     op.diag .= op.diag .+ val .* gen.ops[2].diag
 end
 
 function evalcontrols!(
     op::Diagonal{Float64, Vector{Float64}},
-    gen::Generator{Diagonal{Float64, Vector{Float64}}, Vector{Float64}},
+    gen::Generator{Diagonal{Float64, Vector{Float64}}, CT},
     vals_dict,
     tlist::Vector{Float64},
     n::Int64
-)
-    @assert (length(gen.ops) == 2) && (length(gen.amplitudes) == 1)
-    op.diag .= gen.ops[1].diag
-    val = vals_dict[gen.amplitudes[1]]
-    op.diag .= op.diag .+ val .* gen.ops[2].diag
+) where {CT}
+    if (length(gen.ops) == 2) && (length(gen.amplitudes) == 1)
+        op.diag .= gen.ops[1].diag
+        val = evalcontrols(gen.amplitudes[1], vals_dict, tlist, n)
+        op.diag .= op.diag .+ val .* gen.ops[2].diag
+    elseif (length(gen.ops) == 1) && (length(gen.amplitudes) == 1)
+        val = evalcontrols(gen.amplitudes[1], vals_dict, tlist, n)
+        op.diag .= val .* gen.ops[1].diag
+    else
+        error("Not implemented")
+    end
 end
 
 
 function evalcontrols!(op::SplitOperator, gen::SplitGenerator, args...)
-    evalcontrols!(op.T, gen.T, args...)
-    evalcontrols!(op.V, gen.V, args...)
+    if !isnothing(op.T)
+        evalcontrols!(op.T, gen.T, args...)
+    end
+    if !isnothing(op.V)
+        evalcontrols!(op.V, gen.V, args...)
+    end
 end
+
 
 function substitute_controls(gen::SplitGenerator, controls_map)
     @assert length(getcontrols(gen.T)) == 0
-    V = substitute_controls(gen.V, controls_map)
-    return SplitGenerator(gen.T, V, gen.to_p!, gen.to_x!)
+    V = isnothing(gen.V) ? nothing : substitute_controls(gen.V, controls_map)
+    T = isnothing(gen.T) ? nothing : substitute_controls(gen.T, controls_map)
+    return SplitGenerator(T, V, gen.to_p!, gen.to_x!)
 end
 
+
 function getcontrolderiv(gen::SplitGenerator, control)
-    @assert length(getcontrols(gen.T)) == 0
-    V_deriv = getcontrolderiv(gen.V, control)
-    return SplitGenerator(gen.T, V_deriv, gen.to_p!, gen.to_x!)
+    T_deriv = isnothing(gen.T) ? nothing : getcontrolderiv(gen.T, control)
+    V_deriv = isnothing(gen.V) ? nothing : getcontrolderiv(gen.V, control)
+    if isnothing(T_deriv) && isnothing(V_deriv)
+        return nothing
+    else
+        if isnothing(T_deriv)
+            return V_deriv
+        else
+            return SplitGenerator(T_deriv, V_deriv, gen.to_p!, gen.to_x!)
+        end
+    end
 end
 
 dynamical_generator_adjoint(G::SplitGenerator) = G
 
 
 #### RotTAI_PotentialGenerator
+#
+# This gets plugged in to `SplitGenerator` as the V component
 
 
 @doc raw"""
