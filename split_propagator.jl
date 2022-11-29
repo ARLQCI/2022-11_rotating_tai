@@ -24,7 +24,7 @@ end
 
 
 function splitprop!(Ψ, H::SplitOperator, dt, wrk; _...)
-    @assert abs(dt) ≈ abs(wrk.dt) "|dt=$dt| ≉ |wrk.dt=$(wrk.dt)|"
+    @assert dt ≈ wrk.dt "dt=$dt ≠ wrk.dt=$(wrk.dt)"
     T = H.T
     V = H.V
     if !wrk.T_is_static
@@ -84,6 +84,9 @@ function initprop(
         t = float(tlist[n+1])
     end
     dt = tlist[2] - tlist[1]
+    if backward
+        dt = -dt
+    end
     wrk = SplitPropWrk(generator, G, dt)
     GT = typeof(generator)
     OT = typeof(G)
