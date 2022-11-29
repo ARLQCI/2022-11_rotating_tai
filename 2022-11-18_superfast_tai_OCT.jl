@@ -328,56 +328,6 @@ cheby_propagator.wrk.E_min
 
 cheby_propagator.wrk.Δ
 
-# ## Backward propagation (Split Propagator)
-
-fw_propagator = initprop(
-    Ψ₀,
-    Ĥ,
-    tlist;
-    method=:splitprop,
-    specrange_method=:arnoldi,
-);
-
-Ψ₁ = propstep!(fw_propagator);
-
-dt = tlist[2] - tlist[1]
-
-Ψ1 = copy(Ψ₀)
-splitprop!(Ψ1, Ĥ₀, dt, fw_propagator.wrk)
-
-splitprop!(Ψ1, Ĥ₀, -dt, bw_propagator.wrk)
-
-Ψ1 ⋅ Ψ₀
-
-phasefactor = exp(1im * angle(Ψ₀ ⋅ Ψ₁))
-
-bw_propagator = initprop(
-    Ψ₁,
-    Ĥ,
-    tlist;
-    method=:splitprop,
-    specrange_method=:arnoldi,
-    backward=true
-);
-
-Ψ0 = propstep!(bw_propagator);
-
-abs(Ψ0 ⋅ Ψ₀)
-
-bw_states = propagate(
-    split_states[:,end],
-    Ĥ,
-    tlist;
-    method=:splitprop,
-    specrange_method=:arnoldi,
-    storage=true,
-    backward=true,
-);
-
-bw_states[:,end-1] ⋅ split_states[:,end-1]
-
-Ψ_bw ⋅ Ψ₀
-
 # ## Optimization
 
 using QuantumControl
@@ -415,7 +365,7 @@ problem = ControlProblem(;
     objectives=[objective],
     tlist=tlist,
     J_T=J_T_sm,
-    prop_method=:cheby,
+    prop_method=:splitprop,
     verbose=true,
     pulse_options=IdDict(
         δω => Dict(:lambda_a => 1e8, :update_shape => t->1.0)
@@ -435,10 +385,6 @@ opt = @optimize_or_load(
 )
 
 plot(opt.optimized_controls[1])
-
-# +
-#serialize("delta_omega_optimized.dump", δω)
-# -
 
 ω_opt = discretize(
     Array(
