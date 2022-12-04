@@ -1,6 +1,6 @@
 import QuantumPropagators.Controls:
-    getcontrols, evalcontrols, substitute_controls
-import QuantumControlBase: getcontrolderiv
+    get_controls, evaluate, substitute
+import QuantumControlBase: get_control_deriv
 
 
 mutable struct IntegratedAmplitudeEvalCache
@@ -17,7 +17,7 @@ struct IntegratedAmplitude
 end
 
 
-function evalcontrols(ampl::IntegratedAmplitude, vals_dict, tlist, n)
+function evaluate(ampl::IntegratedAmplitude, tlist, n; vals_dict=IdDict())
     control = ampl.control
     if length(control) ≠ (length(tlist) - 1)
         error("control must be defined on the intervals of tlist")
@@ -45,17 +45,17 @@ function evalcontrols(ampl::IntegratedAmplitude, vals_dict, tlist, n)
 end
 
 
-function getcontrols(ampl::IntegratedAmplitude)
+function get_controls(ampl::IntegratedAmplitude)
     return (ampl.control, )
 end
 
 
-function substitute_controls(ampl::IntegratedAmplitude, controls_map)
+function substitute(ampl::IntegratedAmplitude, controls_map)
     return IntegratedAmplitude(get(controls_map, control, control))
 end
 
 
-function getcontrolderiv(ampl::IntegratedAmplitude, control)
+function get_control_deriv(ampl::IntegratedAmplitude, control)
     if control ≡ ampl.control
         return 1.0
     else

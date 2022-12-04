@@ -24,7 +24,7 @@ using QuantumPropagators
 using LinearAlgebra
 using FFTW
 
-import QuantumControl.Controls: discretize, discretize_on_midpoints, evalcontrols
+import QuantumControl.Controls: discretize, discretize_on_midpoints, evaluate
 
 using Revise
 
@@ -92,16 +92,6 @@ phi(; w0=OMEGA_TARGET, t_r=SEPARATION_TIME) = IntegratedAmplitude(
         tlist
     )
 );
-
-function evaluate(generator::SplitGenerator, tlist, n)
-    vals_dict = IdDict(c => c[n] for c ∈ getcontrols(generator))
-    evalcontrols(generator, vals_dict, tlist, n)
-end
-
-function evaluate(ampl::IntegratedAmplitude, tlist, n)
-    vals_dict = IdDict(ampl.control => ampl.control[n])
-    return evalcontrols(ampl, vals_dict, tlist, n)
-end
 
 function discretize_on_midpoints(ampl::IntegratedAmplitude, tlist)
     N = length(tlist) - 1
@@ -284,7 +274,7 @@ Ĥ_free = evaluate(
         theta=theta_free,
         phi=[0.0,]
     ),
-    tlist, 1
+    [0, 1.0], 1
 );
 
 plot(theta_free./π, Ĥ_free.V.diag./MHz, xlabel="θ/π", ylabel="Energy (MHz)", label="V")
@@ -292,16 +282,6 @@ _offset = minimum(V̂_free.diag./MHz)
 plot!(theta_free./π, 50 .* abs2.(Ψ_free_cut).+_offset, label="|Ψ|²")
 
 # ## Full scheme propagation
-
-function prop_scheme(t_split, phi_split; dir=1, Ω=0, V0=POTENTIAL_DEPTH, m=N_SITES, mass=EFFECTIVE_MASS)
-    tlist_split = collect(range(0, t_split, length=(Int(t_split÷ms)*1000+1)));
-    theta_grid_split = ...
-    Ĥ_split = rotating_tai_hamiltonian(;
-        tlist_split, theta_grid_split, phi_split, direction, 
-        V0, m, mass, Omega=Ω
-    )
-)
-end
 
 function eval_scheme(t_split, t_free, Ω)
     Ψ0 = prop_squeme(;dir=1, Ω=Ω)
@@ -316,7 +296,7 @@ using QuantumControl
 
 objective = Objective(initial_state=Ψ₀, target_state=Ψ_tgt, generator=Ĥ)
 
-ω = getcontrols(objective.generator)[1];
+ω = get_controls(objective.generator)[1];
 
 problem = ControlProblem(;objectives=[objective], tlist, pulse_options=IdDict(ω => Dict(:lambda_a => 1.0, :update_shape=>(t -> 1.0))));
 

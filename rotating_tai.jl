@@ -2,8 +2,8 @@ using LinearAlgebra
 using QuantumPropagators
 using QuantumPropagators: Operator, Generator
 import QuantumPropagators.Controls:
-    getcontrols, evalcontrols, evalcontrols!, substitute_controls
-import QuantumControlBase: getcontrolderiv, dynamical_generator_adjoint
+    get_controls, evaluate, evaluate!, substitute
+import QuantumControlBase: get_control_deriv, dynamical_generator_adjoint
 
 
 #### Split Operator
@@ -75,11 +75,11 @@ function Base.:*(H::SplitOperator, Ψ)
 end
 
 
-getcontrols(::SplitOperator) = ( );
+get_controls(::SplitOperator) = ( );
 
-evalcontrols(O::SplitOperator, args...) = O;
+evaluate(O::SplitOperator, args...; kwargs...) = O;
 
-evalcontrols!(O::SplitOperator, H::SplitOperator, args...) = O;
+evaluate!(O::SplitOperator, H::SplitOperator, args...; kwargs...) = O;
 
 
 #### Split Generator
@@ -87,11 +87,11 @@ evalcontrols!(O::SplitOperator, H::SplitOperator, args...) = O;
 
 # Reminder: any generator needs to implement
 #
-# * getcontrols
-# * evalcontrols
-# * evalcontrols!
-# * substitute_controls
-# * getcontrolderiv
+# * get_controls
+# * evaluate
+# * evaluate!
+# * substitute
+# * get_control_deriv
 #
 
 struct SplitGenerator
@@ -101,20 +101,20 @@ struct SplitGenerator
     to_x!::Function
 end
 
-function getcontrols(gen::SplitGenerator)
+function get_controls(gen::SplitGenerator)
     if !isnothing(gen.T) && !isnothing(gen.V)
-        return (getcontrols(gen.T)..., getcontrols(gen.V)...)
+        return (get_controls(gen.T)..., get_controls(gen.V)...)
     elseif isnothing(gen.T) && !isnothing(gen.V)
-        return getcontrols(gen.V)
+        return get_controls(gen.V)
     elseif !isnothing(gen.T) && isnothing(gen.V)
-        return getcontrols(gen.T)
+        return get_controls(gen.T)
     else
         return ()
     end
 end
 
-function evalcontrols(gen::SplitGenerator, args...)
-    T̂ = isnothing(gen.T) ? nothing : evalcontrols(gen.T, args...)
+function evaluate(gen::SplitGenerator, args...; kwargs...)
+    T̂ = isnothing(gen.T) ? nothing : evaluate(gen.T, args...; kwargs...)
     if T̂ isa Operator
         # SplitOperator can only have a "Diagonal" matrix. If we get a general
         # operator, we have to sum it into a single operator
@@ -126,40 +126,24 @@ function evalcontrols(gen::SplitGenerator, args...)
             error("Not implemented")
         end
     end
-    V̂ = isnothing(gen.V) ? nothing : evalcontrols(gen.V, args...)
+    V̂ = isnothing(gen.V) ? nothing : evaluate(gen.V, args...; kwargs...)
     SplitOperator(T̂, V̂, gen.to_p!, gen.to_x!)
 end
 
 
-function evalcontrols!(
-    op::Diagonal{Float64, Vector{Float64}},
-    gen::Generator{Diagonal{Float64, AbstractVector{Float64}}, CT},
-    vals_dict,
-    tlist::Vector{Float64},
-    n::Int64
-   ) where {CT}
-    # TODO: remove this method
-    @error("Diagonal over AbstractVector. Make sure everything is Vector{Float64}")
-    # You probably need to convert `fftfreq` from `Frequencies` to `Vector`
-    @assert (length(gen.ops) == 2) && (length(gen.amplitudes) == 1)
-    op.diag .= gen.ops[1].diag
-    val = evalcontrols(gen.amplitudes[1], vals_dict, tlist, n)
-    op.diag .= op.diag .+ val .* gen.ops[2].diag
-end
-
-function evalcontrols!(
+function evaluate!(
     op::Diagonal{Float64, Vector{Float64}},
     gen::Generator{Diagonal{Float64, Vector{Float64}}, CT},
-    vals_dict,
     tlist::Vector{Float64},
-    n::Int64
+    n::Int64;
+    vals_dict=IdDict(),
 ) where {CT}
     if (length(gen.ops) == 2) && (length(gen.amplitudes) == 1)
         op.diag .= gen.ops[1].diag
-        val = evalcontrols(gen.amplitudes[1], vals_dict, tlist, n)
+        val = evaluate(gen.amplitudes[1], tlist, n; vals_dict)
         op.diag .= op.diag .+ val .* gen.ops[2].diag
     elseif (length(gen.ops) == 1) && (length(gen.amplitudes) == 1)
-        val = evalcontrols(gen.amplitudes[1], vals_dict, tlist, n)
+        val = evaluate(gen.amplitudes[1], tlist, n; vals_dict)
         op.diag .= val .* gen.ops[1].diag
     else
         error("Not implemented")
@@ -167,27 +151,27 @@ function evalcontrols!(
 end
 
 
-function evalcontrols!(op::SplitOperator, gen::SplitGenerator, args...)
+function evaluate!(op::SplitOperator, gen::SplitGenerator, args...; kwargs...)
     if !isnothing(op.T)
-        evalcontrols!(op.T, gen.T, args...)
+        evaluate!(op.T, gen.T, args...; kwargs...)
     end
     if !isnothing(op.V)
-        evalcontrols!(op.V, gen.V, args...)
+        evaluate!(op.V, gen.V, args...; kwargs...)
     end
 end
 
 
-function substitute_controls(gen::SplitGenerator, controls_map)
-    @assert length(getcontrols(gen.T)) == 0
-    V = isnothing(gen.V) ? nothing : substitute_controls(gen.V, controls_map)
-    T = isnothing(gen.T) ? nothing : substitute_controls(gen.T, controls_map)
+function substitute(gen::SplitGenerator, controls_map)
+    @assert length(get_controls(gen.T)) == 0
+    V = isnothing(gen.V) ? nothing : substitute(gen.V, controls_map)
+    T = isnothing(gen.T) ? nothing : substitute(gen.T, controls_map)
     return SplitGenerator(T, V, gen.to_p!, gen.to_x!)
 end
 
 
-function getcontrolderiv(gen::SplitGenerator, control)
-    T_deriv = isnothing(gen.T) ? nothing : getcontrolderiv(gen.T, control)
-    V_deriv = isnothing(gen.V) ? nothing : getcontrolderiv(gen.V, control)
+function get_control_deriv(gen::SplitGenerator, control)
+    T_deriv = isnothing(gen.T) ? nothing : get_control_deriv(gen.T, control)
+    V_deriv = isnothing(gen.V) ? nothing : get_control_deriv(gen.V, control)
     if isnothing(T_deriv) && isnothing(V_deriv)
         return nothing
     else
@@ -225,13 +209,13 @@ struct RotTAI_PotentialGenerator
 end
 
 
-function getcontrols(gen::RotTAI_PotentialGenerator)
-    return getcontrols(gen.phi)
+function get_controls(gen::RotTAI_PotentialGenerator)
+    return get_controls(gen.phi)
 end
 
-function evalcontrols(gen::RotTAI_PotentialGenerator, vals_dict, args...)
+function evaluate(gen::RotTAI_PotentialGenerator, args...; kwargs...)
     op = Diagonal(similar(gen.theta))
-    evalcontrols!(op, gen, vals_dict, args...)
+    evaluate!(op, gen, args...; kwargs...)
 end
 
 
@@ -252,21 +236,21 @@ function _t(tlist, n)
 end
 
 
-function evalcontrols!(
+function evaluate!(
     op::Diagonal{Float64,Vector{Float64}},
     gen::RotTAI_PotentialGenerator,
-    vals_dict,
-    tlist,
-    n
+    args...;
+    kwargs...
+
 )
     V₀::Float64 = gen.V0
     m::Int64 = gen.m
     θ::Vector{Float64} = gen.theta
-    ϕ::Float64 = evalcontrols(gen.phi, vals_dict, tlist, n)
+    ϕ::Float64 = evaluate(gen.phi, args...; kwargs...)
     Ω::Float64 = gen.Omega
     Ω_t = 0.0
     if Ω ≠ 0.0
-        Ω_t = Ω * _t(tlist, n)
+        Ω_t = evaluate(t -> Ω * t, args...; kwargs...)
     end
     if gen.direction > 0
         op.diag .= V₀ .* cos.(m .* (θ .- ϕ .+ Ω_t))
@@ -277,8 +261,8 @@ function evalcontrols!(
 end
 
 
-function getcontrolderiv(generator::RotTAI_PotentialGenerator, control)
-    ∂ϕ = getcontrolderiv(generator.phi, control)
+function get_control_deriv(generator::RotTAI_PotentialGenerator, control)
+    ∂ϕ = get_control_deriv(generator.phi, control)
     if ∂ϕ == 0
         return nothing
     else
@@ -309,17 +293,17 @@ struct RotTAI_PotentialDerivGenerator
 end
 
 
-function evalcontrols(gen::RotTAI_PotentialDerivGenerator, vals_dict, args...)
+function evaluate(gen::RotTAI_PotentialDerivGenerator, args...; kwargs...)
     op = Diagonal(similar(gen.theta))
-    evalcontrols!(op, gen, vals_dict, args...)
+    evaluate!(op, gen, vals_dict, args...; kwargs...)
 end
 
 
-function evalcontrols!(
+function evaluate!(
     op::Diagonal{Float64,Vector{Float64}},
     gen::RotTAI_PotentialDerivGenerator,
-    vals_dict,
-    args...
+    args...;
+    vals_dict=IdDict()
 )
     V₀::Float64 = gen.V0
     m::Int64 = gen.m
@@ -329,8 +313,8 @@ function evalcontrols!(
     if Ω ≠ 0.0
         Ω_t = Ω * _t(tlist, n)
     end
-    ϕ::Float64 = evalcontrols(gen.phi, vals_dict, args...)
-    ∂ϕ::Float64 = evalcontrols(gen.phi_deriv, vals_dict, args...)
+    ϕ::Float64 = evaluate(gen.phi, args...; vals_dict)
+    ∂ϕ::Float64 = evaluate(gen.phi_deriv, args...; vals_dict)
     @assert ∂ϕ == gen.phi_deriv == 1.0
     if gen.direction > 0
         op.diag .= -m .* V₀ .* ∂ϕ .* sin.(m .* (θ .- ϕ .+ Ω_t))

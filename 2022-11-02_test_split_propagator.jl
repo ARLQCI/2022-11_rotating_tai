@@ -84,11 +84,11 @@ Ĥ = rotating_tai_hamiltonian(
     phi=t->phi(t; w0=(2π/sec), t_r=100ms)
 );
 
-ϕ = getcontrols(Ĥ)[1]
+ϕ = get_controls(Ĥ)[1]
 
 plot(ϕ.(tlist))
 
-Ĥ₀ = evalcontrols(Ĥ, IdDict(ϕ => 0.0))
+Ĥ₀ = evaluate(Ĥ; vals_dict=IdDict(ϕ => 0.0))
 V̂₀ = Ĥ₀.V;
 
 # ## Calculate initial state
@@ -119,7 +119,7 @@ split_states = propagate(Ψ_ground, Ĥ, tlist; method=:splitprop, storage=true,
 function plot_system(generator, states, theta_grid, tlist, n; psi_scale=5)
     t = tlist[n]
     Ĥ = generator
-    V = evalcontrols(Ĥ, IdDict(getcontrols(Ĥ)[1] => getcontrols(Ĥ)[1](t))).V.diag
+    V = evaluate(Ĥ, t).V.diag
     offset = minimum(V/MHz)
     Ψ = states[:,n]
     fig = plot(theta_grid./(2π), V/MHz, xlabel="θ/2π", ylabel="Energy (MHz)", label="V")
@@ -134,7 +134,7 @@ gif(anim, "anim.gif", fps=10)
 
 # ## Optimization Target
 
-Ĥ_tgt = evalcontrols(Ĥ, IdDict(ϕ => getcontrols(Ĥ)[1](tlist[end])))
+Ĥ_tgt = evaluate(Ĥ, tlist[end])
 V̂_tgt = Ĥ_tgt.V;
 
 plot(theta_grid./(2π), V̂_tgt.diag./MHz, xlabel="θ/2π", ylabel="Energy (MHz)", label="V̂_tgt")

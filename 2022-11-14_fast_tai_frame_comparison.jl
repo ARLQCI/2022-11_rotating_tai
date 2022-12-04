@@ -23,7 +23,7 @@ using LinearAlgebra
 using FFTW
 using ProgressMeter
 
-import QuantumControl.Controls: discretize, discretize_on_midpoints, evalcontrols
+import QuantumControl.Controls: discretize, discretize_on_midpoints, evaluate
 
 using Revise
 
@@ -105,7 +105,7 @@ function rotating_tai_hamiltonian_moving_frame(;
 
     dθ = θ[2] - θ[1]
     nθ = length(θ)
-    pgrid = 2π * fftfreq(nθ, 1 / dθ)
+    pgrid::Vector{Float64} = 2π * fftfreq(nθ, 1 / dθ)
     P = Diagonal(pgrid)
     K = Diagonal(pgrid .^ 2 / (2 * mass))
 
@@ -137,11 +137,6 @@ end
 
 omega_ramp_up(t; w0=OMEGA_TARGET, t_r=SEPARATION_TIME) = w0 * sin(π * t / (2t_r))^2;
 omega_ramp_down(t; w0=OMEGA_TARGET, t_r=SEPARATION_TIME) = w0 * cos(π * t / (2t_r))^2;
-
-function evaluate(generator, tlist, n)
-    vals_dict = IdDict(c => c[n] for c ∈ getcontrols(generator))
-    evalcontrols(generator, vals_dict, tlist, n)
-end
 
 plot(
     tlist ./ sec,
@@ -338,29 +333,29 @@ function moving_to_lab(
     θ_lab::Vector{Float64},
     tlist::Vector{Float64},
     n=length(tlist)
-)        
+)
     dθ = θ_lab[2] - θ_lab[1]
     nθ = length(θ_lab)
     pgrid = 2π * fftfreq(nθ, 1 / dθ)
     P = Diagonal(pgrid)
-    
+
     dt = tlist[2] - tlist[1]
     Φ = sum(ω[1:n-1]) * dt
-    
+
     U = exp(-1im * Φ * P)
-    
+
     Ψ = [Ψ..., zeros(length(θ_lab) - length(Ψ))...]
     fft!(Ψ)
     Ψ = U * Ψ
     ifft!(Ψ)
     return Ψ
-    
+
 end
 # -
 
 Ψ_lab = moving_to_lab(
     states_moving[:,end],
-    getcontrols(Ĥ_moving)[1],
+    get_controls(Ĥ_moving)[1],
     theta_grid_lab_frame,
     tlist
 )

@@ -1,6 +1,6 @@
 using QuantumPropagators:
     PWCPropagator, _pwc_set_t!, _pwc_set_genop!, _pwc_get_max_genop, _pwc_process_parameters, _pwc_advance_time!
-import QuantumPropagators: initprop, set_t!, propstep!
+import QuantumPropagators: init_prop, set_t!, prop_step!
 
 
 ###############################################################################
@@ -61,7 +61,7 @@ end
 
 set_t!(propagator::SplitPropagator, t) = _pwc_set_t!(propagator, t)
 
-function initprop(
+function init_prop(
     state,
     generator,
     tlist,
@@ -74,7 +74,7 @@ function initprop(
 )
     generator::SplitGenerator
     tlist = convert(Vector{Float64}, tlist)
-    controls = getcontrols(generator)
+    controls = get_controls(generator)
     G::SplitOperator = _pwc_get_max_genop(generator, controls, tlist)
     parameters = _pwc_process_parameters(parameters, controls, tlist)
     n = 1
@@ -108,7 +108,7 @@ function initprop(
 end
 
 
-function propstep!(propagator::SplitPropagator)
+function prop_step!(propagator::SplitPropagator)
     n = propagator.n
     tlist = getfield(propagator, :tlist)
     (0 < n < length(tlist)) || return nothing

@@ -22,7 +22,7 @@ using QuantumPropagators
 using LinearAlgebra
 using FFTW
 
-import QuantumControl.Controls: discretize, discretize_on_midpoints, evalcontrols
+import QuantumControl.Controls: discretize, discretize_on_midpoints, evaluate
 
 using Revise
 
@@ -73,16 +73,6 @@ phi(; w0, t_r) = IntegratedAmplitude(
     )
 );
 
-function evaluate(generator::SplitGenerator, tlist, n)
-    vals_dict = IdDict(c => c[n] for c ∈ getcontrols(generator))
-    evalcontrols(generator, vals_dict, tlist, n)
-end
-
-function evaluate(ampl::IntegratedAmplitude, tlist, n)
-    vals_dict = IdDict(ampl.control => ampl.control[n])
-    return evalcontrols(ampl, vals_dict, tlist, n)
-end
-
 function discretize_on_midpoints(ampl::IntegratedAmplitude, tlist)
     N = length(tlist) - 1
     return [evaluate(ampl, tlist, n) for n ∈ 1:N]
@@ -103,9 +93,9 @@ Ĥ = rotating_tai_hamiltonian(
     phi=phi(; w0=(2π/sec), t_r=100ms)
 );
 
-ω = getcontrols(Ĥ)[1];
+ω = get_controls(Ĥ)[1];
 
-getcontrols(Ĥ)[1] ≡ ω
+get_controls(Ĥ)[1] ≡ ω
 
 Ĥ₀ = evaluate(Ĥ, tlist, 1)
 V̂₀ = Ĥ₀.V;

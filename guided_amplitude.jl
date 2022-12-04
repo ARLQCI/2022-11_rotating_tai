@@ -1,7 +1,7 @@
 using QuantumPropagators.Amplitudes: ControlAmplitude, LockedAmplitude
 using QuantumPropagators.Controls: discretize_on_midpoints
-import QuantumPropagators.Controls: evalcontrols
-import QuantumControlBase: getcontrolderiv
+import QuantumPropagators.Controls: evaluate
+import QuantumControlBase: get_control_deriv
 
 """An amplitude of the form ``G(t) + S(t) ϵ(t)``.
 
@@ -72,15 +72,18 @@ end
 (ampl::GuidedContinuousAmplitude)(t::Float64) = ampl.guide(t) + ampl.shape(t) * ampl.control(t)
 
 
-function evalcontrols(ampl::GuidedPulseAmplitude, vals_dict, tlist, n)
-    return ampl.shape[n] * vals_dict[ampl.control] + ampl.guide[n]
+function evaluate(ampl::GuidedPulseAmplitude, args...; kwargs...)
+    S = evaluate(ampl.shape, args...; kwargs...) 
+    δϵ = evaluate(ampl.control, args...; kwargs...)
+    G = evaluate(ampl.guide, args...; kwargs...)
+    return S *  δϵ +  G
 end
 
 
-function evalcontrols(ampl::GuidedContinuousAmplitude, vals_dict, tlist, n)
+function evaluate(ampl::GuidedContinuousAmplitude, args...; kwargs...)
     error("Not implemented")
 end
 
-getcontrolderiv(ampl::GuidedAmplitude, control) =
+get_control_deriv(ampl::GuidedAmplitude, control) =
     (control ≡ ampl.control) ? LockedAmplitude(ampl.shape) : 0.0
 

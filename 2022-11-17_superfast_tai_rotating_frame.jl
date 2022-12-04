@@ -35,7 +35,7 @@ using LinearAlgebra
 using FFTW
 using ProgressMeter
 
-import QuantumControl.Controls: discretize, discretize_on_midpoints, evalcontrols
+import QuantumControl.Controls: discretize, discretize_on_midpoints, evaluate
 
 using Revise
 
@@ -89,7 +89,7 @@ function rotating_tai_hamiltonian(;
 
     dθ = θ[2] - θ[1]
     nθ = length(θ)
-    pgrid = 2π * fftfreq(nθ, 1 / dθ)
+    pgrid::Vector{Float64} = 2π * fftfreq(nθ, 1 / dθ)
     P = Diagonal(pgrid)
     K = Diagonal(pgrid .^ 2 / (2 * mass))
 
@@ -121,11 +121,6 @@ end
 
 omega_ramp_up(t; w0=OMEGA_TARGET, t_r=SEPARATION_TIME) = w0 * sin(π * t / (2t_r))^2;
 omega_ramp_down(t; w0=OMEGA_TARGET, t_r=SEPARATION_TIME) = w0 * cos(π * t / (2t_r))^2;
-
-function evaluate(generator, tlist, n)
-    vals_dict = IdDict(c => c[n] for c ∈ getcontrols(generator))
-    evalcontrols(generator, vals_dict, tlist, n)
-end
 
 plot(
     tlist ./ sec,

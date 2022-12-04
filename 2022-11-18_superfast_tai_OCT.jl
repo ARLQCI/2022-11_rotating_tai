@@ -36,7 +36,7 @@ using FFTW
 using Serialization
 using ProgressMeter
 
-import QuantumControl.Controls: discretize, discretize_on_midpoints, evalcontrols
+import QuantumControl.Controls: discretize, discretize_on_midpoints, evaluate
 
 using Revise
 
@@ -122,11 +122,6 @@ end
 
 omega_ramp_up(t; w0=OMEGA_TARGET, t_r=SEPARATION_TIME) = w0 * sin(π * t / (2t_r))^2;
 omega_ramp_down(t; w0=OMEGA_TARGET, t_r=SEPARATION_TIME) = w0 * cos(π * t / (2t_r))^2;
-
-function evaluate(generator, tlist, n)
-    vals_dict = IdDict(c => c[n] for c ∈ getcontrols(generator))
-    evalcontrols(generator, vals_dict, tlist, n)
-end
 
 plot(
     tlist ./ sec,
@@ -313,7 +308,7 @@ abs2(cheby_states[:, end] ⋅ Ψ_tgt)
 
 angle(cheby_states[:, end] ⋅ Ψ_tgt) / π
 
-cheby_propagator = initprop(
+cheby_propagator = init_prop(
     Ψ₀,
     Ĥ,
     tlist;
@@ -359,7 +354,7 @@ import QuantumPropagators.SpectralRange: specrange
 specrange(::Any, method::Val{:manual}; kwargs...) = (-30, 160)#(-50, 200)
 
 # +
-δω = getcontrols(objective.generator)[1];
+δω = get_controls(objective.generator)[1];
 
 problem = ControlProblem(;
     objectives=[objective],
@@ -407,7 +402,7 @@ plot(tlist ./ sec, (ω_opt - ω_guess) / (2π / sec); label="δω")
 Ĥ_opt = rotating_tai_hamiltonian(
     tlist=tlist,
     θ=theta_grid,
-    ω=ω_opt)
+    ω=ω_opt,
 );
 
 Ψ_opt = propagate(

@@ -59,7 +59,7 @@ function rotating_tai_hamiltonian(; tlist, V0, m, theta, phi, mass=(TAI_RADIUS^2
 end
 
 # +
-function phi(t; w0, t_r, t_loop) 
+function phi(t; w0, t_r, t_loop)
     if t <= t_r
         return 0.5 * w0 * t - 0.5 * w0 * t_r * sin(π * t / t_r) / π
     elseif t <= t_r + t_loop
@@ -85,15 +85,15 @@ Ĥ = rotating_tai_hamiltonian(
     phi=t->phi(t; w0=(2π/sec), t_r=100ms, t_loop=800ms)
 );
 
-ϕ = getcontrols(Ĥ)[1]
-Ĥ₀ = evalcontrols(Ĥ, IdDict(ϕ => 0.0))
+ϕ = get_controls(Ĥ)[1]
+Ĥ₀ = evaluate(Ĥ; vals_dict=IdDict(ϕ => 0.0))
 V̂₀ = Ĥ₀.V;
 Ψ_ground = get_ground_state(Ĥ₀, theta_grid, 2π/16,  d=0.05, steps=10_000);
 
 function plot_system(generator, states, theta_grid, tlist, n; psi_scale=5)
     t = tlist[n]
     Ĥ = generator
-    V = evalcontrols(Ĥ, IdDict(getcontrols(Ĥ)[1] => getcontrols(Ĥ)[1](t))).V.diag
+    V = evaluate(Ĥ, t).V.diag
     offset = minimum(V/MHz)
     Ψ = states[:,n]
     fig = plot(theta_grid./(2π), V/MHz, xlabel="θ/2π", ylabel="Energy (MHz)", label="V")
@@ -114,9 +114,9 @@ gif(anim, "anim.gif", fps=10)
 function test(; dir=1, Ω=0)
     tlist = collect(range(0, 0.4sec, step=25μs));
     theta_grid = collect(range(0, 2π, length=4096));
-    
-    α = (2π)/phi(1sec; w0=(2π/sec), t_r=100ms, t_loop=800ms) 
-    
+
+    α = (2π)/phi(1sec; w0=(2π/sec), t_r=100ms, t_loop=800ms)
+
     Ĥ = rotating_tai_hamiltonian(
         tlist=tlist,
         theta=theta_grid,
@@ -125,17 +125,17 @@ function test(; dir=1, Ω=0)
         #phi=t -> Ω * t
         phi=t -> dir * phi(t; w0=α*(2π/sec), t_r=100ms, t_loop=800ms) + Ω * t
     );
-    
-    ϕ = getcontrols(Ĥ)[1]
-    Ĥ₀ = evalcontrols(Ĥ, IdDict(ϕ => 0.0))
+
+    ϕ = get_controls(Ĥ)[1]
+    Ĥ₀ = evaluate(Ĥ; vals_dict=IdDict(ϕ => 0.0))
     V̂₀ = Ĥ₀.V;
-    
+
     Ψ_ground = get_ground_state(Ĥ₀, theta_grid, 2π/16,  d=0.05, steps=10_000)
     U_boost = exp.(+1im * (TAI_RADIUS^2 * Rb_mass) * Ω * theta_grid)
     moving_Ψ_ground = U_boost .* Ψ_ground
-    
+
     states = propagate(Ψ_ground, Ĥ, tlist; method=:splitprop, storage=true, showprogress=true);
-    
+
     anim = @animate for n=1:length(tlist)÷200:length(tlist)
         plot_system(Ĥ, states, theta_grid, tlist, n; psi_scale=20)
     end
@@ -152,9 +152,9 @@ function prop_squeme(; dir=1, Ω=0)
     tlist = collect(range(0, 1sec, step=50μs));
     theta_grid = collect(range(0, 2π, length=4096));
     #theta_grid = collect(range(0, 2π, length=2048));
-    
-    α = (2π)/phi(1sec; w0=(2π/sec), t_r=100ms, t_loop=800ms) 
-    
+
+    α = (2π)/phi(1sec; w0=(2π/sec), t_r=100ms, t_loop=800ms)
+
     Ĥ = rotating_tai_hamiltonian(
         tlist=tlist,
         theta=theta_grid,
@@ -163,15 +163,15 @@ function prop_squeme(; dir=1, Ω=0)
         #phi=t -> Ω * t
         phi=t -> dir * phi(t; w0=α*(2π/sec), t_r=100ms, t_loop=800ms) + Ω * t
     );
-    
-    ϕ = getcontrols(Ĥ)[1]
-    Ĥ₀ = evalcontrols(Ĥ, IdDict(ϕ => 0.0))
+
+    ϕ = get_controls(Ĥ)[1]
+    Ĥ₀ = evaluate(Ĥ; vals_dict=IdDict(ϕ => 0.0))
     V̂₀ = Ĥ₀.V;
-    
+
     Ψ_ground = get_ground_state(Ĥ₀, theta_grid, 2π/16,  d=0.05, steps=10_000)
     U_boost = exp.(+1im * (TAI_RADIUS^2 * Rb_mass) * Ω * theta_grid)
     moving_Ψ_ground = U_boost .* Ψ_ground
-    
+
     propagate(moving_Ψ_ground, Ĥ, tlist; method=:splitprop, showprogress=true);
 end
 
@@ -179,7 +179,7 @@ end
 function eval_scheme(Ω)
     Ψ0 = prop_squeme(;dir=1, Ω=Ω)
     Ψ1 = prop_squeme(;dir=-1, Ω=Ω)
-    
+
     ## Maybe the overlap with the target first?
     # π/2-pulse
     Ψup = (Ψ0 + Ψ1)
