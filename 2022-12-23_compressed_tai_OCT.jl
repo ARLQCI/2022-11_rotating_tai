@@ -9,12 +9,12 @@
 #       format_version: '1.5'
 #       jupytext_version: 1.11.3
 #   kernelspec:
-#     display_name: Julia 1.8 (auto threads)
+#     display_name: Julia 1.8 (4 threads)
 #     language: julia
 #     name: julia-1.8-multithread
 # ---
 
-# # Rotating TAI with ω(t) - superfast OCT
+# # Rotating TAI with ω(t) - compressed OCT
 
 # Here, we use $\omega(t)$ as the control field and $\phi(t) = \int \omega(t) dt$ as the control amplitude.
 #
@@ -36,7 +36,7 @@ using FFTW
 using Serialization
 using ProgressMeter
 
-import QuantumControl.Controls: discretize, discretize_on_midpoints, evaluate
+import QuantumControl.Controls: discretize, discretize_on_midpoints, evalcontrols
 
 using Revise
 
@@ -57,9 +57,9 @@ const Dalton = 1.5746097504353806e+01;
 const RUBIDIUM_MASS = 86.91Dalton;
 const TAI_RADIUS = 42μm
 const N_SITES = 8;
-const SEPARATION_TIME = 1ms;
+const SEPARATION_TIME = 0.01μs;
 const LOOP_TIME = 900ms;
-const OMEGA_TARGET = 1000π / sec;
+const OMEGA_TARGET = 10π / sec;
 const EFFECTIVE_MASS = TAI_RADIUS^2 * RUBIDIUM_MASS;
 const POTENTIAL_DEPTH = 2.2MHz;
 
@@ -68,8 +68,8 @@ includet("./rotating_tai.jl")
 
 includet("./split_propagator.jl")
 
-tlist = collect(range(0, SEPARATION_TIME, length=(Int(SEPARATION_TIME ÷ ms) * 1000 + 1)));
-theta_grid = collect(range(0, 0.25π, length=4096));
+tlist = collect(range(0, SEPARATION_TIME, length=1001));
+theta_grid = collect(range(0, 0.25π, length=1024));
 
 length(tlist)
 
@@ -123,12 +123,17 @@ end
 omega_ramp_up(t; w0=OMEGA_TARGET, t_r=SEPARATION_TIME) = w0 * sin(π * t / (2t_r))^2;
 omega_ramp_down(t; w0=OMEGA_TARGET, t_r=SEPARATION_TIME) = w0 * cos(π * t / (2t_r))^2;
 
+function evaluate(generator, tlist, n)
+    vals_dict = IdDict(c => c[n] for c ∈ getcontrols(generator))
+    evalcontrols(generator, vals_dict, tlist, n)
+end
+
 plot(
-    tlist ./ sec,
+    tlist ./ μs,
     discretize(omega_ramp_up.(tlist), tlist) / (2π / sec);
     legend=:topleft,
     label="ω(t)",
-    xlabel="time (sec)",
+    xlabel="time (μs)",
     ylabel="angular velocity (2π/sec)"
 )
 
@@ -276,6 +281,10 @@ plot(theta_grid ./ π, abs2.(Ψ_tgt), label="tgt")
 plot!(theta_grid ./ π, abs2.(split_states[:,end]), label="Ψ")
 plot!(; xlim=(0.12, 0.13))
 
+plot(theta_grid ./ π, real.(Ψ_tgt), label="tgt")
+plot!(theta_grid ./ π, real.(split_states[:,end]), label="Ψ")
+plot!(; xlim=(0.12, 0.13))
+
 anim = @animate for n = 1:(length(tlist)÷100):length(tlist)
     plot_system(Ĥ, split_states, theta_grid, tlist, n; xlim=(0.12, 0.13), psi_target=Ψ_tgt)
 end
@@ -308,7 +317,7 @@ abs2(cheby_states[:, end] ⋅ Ψ_tgt)
 
 angle(cheby_states[:, end] ⋅ Ψ_tgt) / π
 
-cheby_propagator = init_prop(
+cheby_propagator = initprop(
     Ψ₀,
     Ĥ,
     tlist;
@@ -354,7 +363,7 @@ import QuantumPropagators.SpectralRange: specrange
 specrange(::Any, method::Val{:manual}; kwargs...) = (-30, 160)#(-50, 200)
 
 # +
-δω = get_controls(objective.generator)[1];
+δω = getcontrols(objective.generator)[1];
 
 problem = ControlProblem(;
     objectives=[objective],
@@ -363,8 +372,9 @@ problem = ControlProblem(;
     prop_method=:splitprop,
     verbose=true,
     pulse_options=IdDict(
-        δω => Dict(:lambda_a => 1e8, :update_shape => t->1.0)
+        δω => Dict(:lambda_a => 1e5, :update_shape => t->1.0)
     ),
+    iter_stop=1000,
     specrange_method=:manual,
     check_normalization=false,
     check_convergence=res -> begin
@@ -374,8 +384,9 @@ problem = ControlProblem(;
 # -
 
 opt = @optimize_or_load(
-    "opt__t_r=10ms__w0=1000πpsec.jld2",
+    "opt_compressed.jld2",
     problem;
+    force=true,
     method=:krotov
 )
 
@@ -402,7 +413,7 @@ plot(tlist ./ sec, (ω_opt - ω_guess) / (2π / sec); label="δω")
 Ĥ_opt = rotating_tai_hamiltonian(
     tlist=tlist,
     θ=theta_grid,
-    ω=ω_opt,
+    ω=ω_opt)
 );
 
 Ψ_opt = propagate(

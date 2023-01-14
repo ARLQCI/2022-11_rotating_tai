@@ -9,7 +9,7 @@
 #       format_version: '1.5'
 #       jupytext_version: 1.11.3
 #   kernelspec:
-#     display_name: Julia 1.8 (4 threads)
+#     display_name: Julia 1.8 (auto threads)
 #     language: julia
 #     name: julia-1.8-multithread
 # ---

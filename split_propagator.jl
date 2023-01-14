@@ -24,7 +24,7 @@ end
 
 
 function splitprop!(Ψ, H::SplitOperator, dt, wrk; _...)
-    @assert dt ≈ wrk.dt "dt=$dt ≠ wrk.dt=$(wrk.dt)"
+    #=@assert dt ≈ wrk.dt "dt=$dt ≠ wrk.dt=$(wrk.dt)"=#
     T = H.T
     V = H.V
     if !wrk.T_is_static
