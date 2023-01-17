@@ -344,23 +344,26 @@ function get_ground_state(Ĥ₀::SplitOperator, theta_grid, θ₀=2π/16; steps
     Ux = exp(-1im * h * Ĥ₀.V)
     θ = theta_grid
 
-    Ψx = convert(Array{ComplexF64}, exp.(-(θ .- θ₀).^2/d^2))
-    normalize!(Ψx)
+    Ψ = convert(Array{ComplexF64}, exp.(-(θ .- θ₀).^2/d^2))
+    normalize!(Ψ)
 
-    Ψk = fft(Ψx)
+    fft = plan_fft!(Ψ)
+    ifft = plan_ifft!(Ψ)
+
+    Ψ = fft * Ψ
 
     for i=1:steps
-        Ψk = Uk2 * Ψk
-        Ψx = ifft(Ψk)
-        Ψx = Ux * Ψx
-        Ψk = fft(Ψx)
-        Ψk = Uk2 * Ψk
-
-        normalize!(Ψk)
+        @. Ψ = Uk2.diag * Ψ
+        Ψ = ifft * Ψ
+        @. Ψ = Ux.diag * Ψ
+        Ψ = fft * Ψ
+        @. Ψ = Uk2.diag * Ψ
+        normalize!(Ψ)
     end
 
-    Ψx = ifft(Ψk)
-    normalize!(Ψx)
+    Ψ = ifft * Ψ
+    normalize!(Ψ)
 
-    return Ψx
+    return Ψ
+
 end

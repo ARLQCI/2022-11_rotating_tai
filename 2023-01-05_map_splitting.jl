@@ -356,7 +356,7 @@ F = run_or_load("2023-01-05_map_splitting_fidelity.npz"; force=false) do
 end
 
 contourf(
-    separation_time_values,
+    separation_time_values ./ sec,
     potential_depth_values ./ MHz,
     F,
     tick_direction=:out,
@@ -364,11 +364,60 @@ contourf(
     yminorticks=2,
     xaxis=:log10,
     ylabel="V₀ (MHz)",
-    xlabel="separation time (μs)",
+    xlabel="separation time (seconds)",
     title=raw"Separation Fidelity $|⟨Ψ(t_r) | Ψ_{\textrm{tgt}}⟩|^2$",
 )
 
-# ## Worst case full scheme propagation
+# + active=""
+# plotlyjs()
+
+# + active=""
+# surface(
+#     separation_time_values ./ μs,
+#     potential_depth_values ./ MHz,
+#     F,
+#     #tick_direction=:out,
+#     #xminorticks=9,
+#     #yminorticks=2,
+#     xaxis=:log10,
+#     ylabel="V₀ (MHz)",
+#     xlabel="separation time (μs)",
+#     title=raw"Separation Fidelity $|⟨Ψ(t_r) | Ψ_{\textrm{tgt}}⟩|^2$",
+#     size=(1000, 600),
+# )
+# -
+
+# ### Lower values of V0
+
+potential_depth_values_low = collect(range(0MHz, 0.1MHz, step=0.01MHz))[1:end-1]
+potential_depth_values_low ./ MHz
+
+F_lowV0 = run_or_load("2023-01-05_map_splitting_fidelity_lowV0.npz"; force=false) do
+    map_fidelity(potential_depth_values_low, separation_time_values)
+end
+
+F_lowV0
+
+potential_depth_values_combined = [potential_depth_values_low..., potential_depth_values...]
+potential_depth_values_combined ./ MHz
+
+F_combined = vcat(F_lowV0, F)
+
+clamp.(F_combined, 0.5, 1.0)
+
+contourf(
+    separation_time_values ./ sec,
+    potential_depth_values_combined ./ MHz,
+    #F_combined,
+    clamp.(F_combined, 0.5, 1.0),
+    tick_direction=:out,
+    xminorticks=9,
+    yminorticks=2,
+    xaxis=:log10,
+    ylabel="V₀ (MHz)",
+    xlabel="separation time (seconds)",
+    title=raw"Separation Fidelity $|⟨Ψ(t_r) | Ψ_{\textrm{tgt}}⟩|^2$",
+)
 
 function p_matrix(theta_grid::Vector{Float64})
     nx::Int64 = length(theta_grid)
@@ -550,7 +599,7 @@ function scan_Ω(Ω_list; ω₀, θ, t_r, t_loop, V0, parallel=true, show_progre
         )
         push!(P_list, P)
         show_progress && next!(progress)
-            
+
     end
     return P_list
 end
@@ -628,7 +677,6 @@ plot(
     ylabel="contrast",
     legend=false,
     title=raw"Contrast for $t_r$ = 0.1 μs, V₀ = 100 kHz",
-    
 )
 # -
 
@@ -636,8 +684,6 @@ loop_times = collect(range(400ms, 3000ms, step=10ms))
 contrast_list = run_or_load("2023-01-05_map_splitting_scan_contrast_highrez.npz"; force=false) do
     scan_contrast(loop_times, Ω_list)
 end
-plotlyjs()
-
 # +
 plot(
     loop_times ./ ms,
@@ -646,7 +692,6 @@ plot(
     ylabel="contrast",
     legend=false,
     title=raw"Contrast for $t_r$ = 0.1 μs, V₀ = 100 kHz",
-    
 )
 # -
 
@@ -664,5 +709,217 @@ plot(
     ylabel="contrast",
     legend=false,
     title=raw"Contrast for $t_r$ = 0.1 μs, V₀ = 100 kHz",
-    
+)
+# -
+
+loop_times = collect(range(850ms, 950ms, step=0.1ms))
+@show length(loop_times)
+contrast_list = run_or_load("2023-01-05_map_splitting_scan_contrast_850_950.npz"; force=false) do
+    scan_contrast(loop_times, Ω_list)
+end
+
+# +
+plot(
+    loop_times ./ ms,
+    contrast_list,
+    xlabel="loop time (ms)",
+    ylabel="contrast",
+    legend=false,
+    title=raw"Contrast for $t_r$ = 0.1 μs, V₀ = 100 kHz",
+)
+# -
+
+loop_times = collect(range(895ms, 905ms, step=0.01ms))
+@show length(loop_times)
+contrast_list = run_or_load("2023-01-05_map_splitting_scan_contrast_895_905.npz"; force=false) do
+    scan_contrast(loop_times, Ω_list)
+end
+
+# +
+plot(
+    loop_times ./ ms,
+    contrast_list,
+    xlabel="loop time (ms)",
+    ylabel="contrast",
+    legend=false,
+    title=raw"Contrast for $t_r$ = 0.1 μs, V₀ = 100 kHz",
+)
+# -
+
+# ### Contrast for exact cycles
+
+function angular_displacement(; ω₀=OMEGA_TARGET, t_r=0.1μs, t_loop)
+
+    nt = choose_timesteps(t_r)
+    tlist_ramp_up = collect(range(0, t_r, length=nt))
+    dt_up = tlist_ramp_up[2] - tlist_ramp_up[1]
+    ω_up = discretize_on_midpoints(t -> omega_ramp_up(t; w0=ω₀, t_r=t_r), tlist_ramp_up)
+
+    tlist_ramp_down =
+        collect(range(t_r + t_loop, 2 * t_r + t_loop, length=nt))
+    dt_down = tlist_ramp_down[2] - tlist_ramp_down[1]
+    ω_down = discretize_on_midpoints(
+        t -> omega_ramp_down(t - t_r - t_loop; w0=ω₀, t_r=t_r),
+        tlist_ramp_down
+    )
+
+    Φ_up = sum(ω_up) * dt_up
+    Φ_loop = t_loop * ω₀
+    Φ_down = sum(ω_down) * dt_down
+    Φ = Φ_up + Φ_loop + Φ_down
+
+    Φtgt = round(Φ / π) * π
+    t_loop_opt = (Φtgt - (Φ_up + Φ_down)) / ω₀
+    if abs(t_loop - t_loop_opt) > 1e-8
+        @warn("angular displacement not aligned. Change t_loop to $(t_loop_opt/ms)ms")
+    end
+
+    return Φ
+end
+
+# +
+function t_loop_for_cycle(n_cycles; ω₀=OMEGA_TARGET, t_r=0.1μs)
+
+    nt = choose_timesteps(t_r)
+    tlist_ramp_up = collect(range(0, t_r, length=nt))
+    dt_up = tlist_ramp_up[2] - tlist_ramp_up[1]
+    ω_up = discretize_on_midpoints(t -> omega_ramp_up(t; w0=ω₀, t_r=t_r), tlist_ramp_up)
+
+    t_loop = 0.0
+    tlist_ramp_down =
+        collect(range(t_r + t_loop, 2 * t_r + t_loop, length=nt))
+    dt_down = tlist_ramp_down[2] - tlist_ramp_down[1]
+    ω_down = discretize_on_midpoints(
+        t -> omega_ramp_down(t - t_r - t_loop; w0=ω₀, t_r=t_r),
+        tlist_ramp_down
+    )
+
+    Φ_up = sum(ω_up) * dt_up
+    Φ_down = sum(ω_down) * dt_down
+
+    Φtgt = n_cycles * π
+    t_loop = (Φtgt - (Φ_up + Φ_down)) / ω₀
+    return t_loop
+
+end
+# -
+
+angular_displacement(;t_loop=t_loop_for_cycle(10)) / π
+
+t_loop_for_cycle(1) / ms
+
+t_loop_for_cycle(1) / sec
+
+t_loop_for_cycle(2) / sec
+
+t_loop_for_cycle(100) / sec
+
+# #### 1 Cycle
+
+n_cycles = 1
+Ω_list = collect(range(0, (0.5 / n_cycles)/ sec, length=21))
+P_list = run_or_load("2023-01-05_map_splitting_scan_1_loop.npz"; force=false) do
+    theta_max = 0.25π
+    theta_steps = 1024
+    θ::Vector{Float64} = collect(range(0, theta_max, length=theta_steps))
+    scan_Ω(Ω_list; ω₀=OMEGA_TARGET, θ, t_r=0.1μs, V0=0.1MHz, t_loop=t_loop_for_cycle(n_cycles))
+end
+
+plot(Ω_list / (1 / sec), P_list, xlabel="Ω (1/sec)", legend=false, ylim=(0, 1))
+
+contrast(P_list)
+
+# #### 10 Cycles
+
+n_cycles = 10
+Ω_list = collect(range(0, (0.5 / n_cycles) / sec, length=41))
+P_list = run_or_load("2023-01-05_map_splitting_scan_10_loop.npz"; force=false) do
+    theta_max = 0.25π
+    theta_steps = 1024
+    θ::Vector{Float64} = collect(range(0, theta_max, length=theta_steps))
+    scan_Ω(Ω_list; ω₀=OMEGA_TARGET, θ, t_r=0.1μs, V0=0.1MHz, t_loop=t_loop_for_cycle(n_cycles))
+end
+
+plot(Ω_list / (1 / sec), P_list, xlabel="Ω (1/sec)", legend=false, ylim=(0, 1))
+
+# #### 100 Cycles
+
+n_cycles = 100
+Ω_list = collect(range(0, (0.5 / n_cycles) / sec, length=21))
+P_list = run_or_load("2023-01-05_map_splitting_scan_100_loop.npz"; force=false) do
+    theta_max = 0.25π
+    theta_steps = 1024
+    θ::Vector{Float64} = collect(range(0, theta_max, length=theta_steps))
+    scan_Ω(Ω_list; ω₀=OMEGA_TARGET, θ, t_r=0.1μs, V0=0.1MHz, t_loop=t_loop_for_cycle(n_cycles))
+end
+
+plot(Ω_list / (1 / sec), P_list, xlabel="Ω (1/sec)", legend=false, ylim=(0, 1))
+
+contrast(P_list)
+
+# #### Scan
+
+function scan_contrast_for_cycles(cycle_numbers)
+    theta_max = 0.25π
+    theta_steps = 1024
+    θ::Vector{Float64} = collect(range(0, theta_max, length=theta_steps))
+    C = zeros(length(cycle_numbers))
+    progress = Progress(length(cycle_numbers))
+    Threads.@threads for i = 1:length(cycle_numbers)
+        n_cycles = cycle_numbers[i]
+        Ω_list = collect(range(0, (0.5 / n_cycles) / sec, length=21))
+        t_loop = t_loop_for_cycle(n_cycles)
+        P_list = scan_Ω(
+            Ω_list;
+            ω₀=OMEGA_TARGET,
+            θ,
+            t_r=0.1μs,
+            V0=0.1MHz,
+            t_loop=float(t_loop),
+            parallel=false,
+            show_progress=false,
+        )
+        C[i] = contrast(P_list)
+        next!(progress)
+    end
+    return C
+end
+
+# ##### Every 5
+
+cycle_numbers = [1, range(5, 500, step=5)...]
+
+contrast_list = run_or_load("2023-01-05_map_splitting_scan_contrast_cycles.npz"; force=false) do
+    scan_contrast_for_cycles(cycle_numbers)
+end
+
+# +
+plot(
+    cycle_numbers,
+    contrast_list;
+    marker="o",
+    xlabel="cycles (≈ 0.1 seconds)",
+    ylabel="contrast",
+    legend=false,
+    title=raw"Contrast for $t_r$ = 0.1 μs, V₀ = 100 kHz",
+)
+# -
+
+# ##### Every 1
+
+cycle_numbers = collect(range(1, 100, step=1))
+
+contrast_list = run_or_load("2023-01-05_map_splitting_scan_contrast_cycles_1_100.npz"; force=false) do
+    scan_contrast_for_cycles(cycle_numbers)
+end
+
+# +
+plot(
+    cycle_numbers,
+    contrast_list;
+    marker="o",
+    xlabel="cycles (≈ 0.1 seconds)",
+    ylabel="contrast",
+    legend=false,
+    title=raw"Contrast for $t_r$ = 0.1 μs, V₀ = 100 kHz",
 )
