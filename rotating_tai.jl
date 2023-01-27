@@ -162,7 +162,6 @@ end
 
 
 function substitute(gen::SplitGenerator, controls_map)
-    @assert length(get_controls(gen.T)) == 0
     V = isnothing(gen.V) ? nothing : substitute(gen.V, controls_map)
     T = isnothing(gen.T) ? nothing : substitute(gen.T, controls_map)
     return SplitGenerator(T, V, gen.to_p!, gen.to_x!)
@@ -366,4 +365,57 @@ function get_ground_state(Ĥ₀::SplitOperator, theta_grid, θ₀=2π/16; steps
 
     return Ψ
 
+end
+
+
+#### Full Hamiltonian
+
+
+function rotating_tai_hamiltonian(;
+    tlist,
+    theta_grid,
+    ω,  # function of time
+    potential_depth,
+    number_of_sites,
+    mass,
+    Ω=0.0,
+    direction=1,
+)
+
+    m = number_of_sites
+    V₀ = potential_depth
+    θ = theta_grid
+
+    V = Diagonal(V₀ .* cos.(m .* θ))
+
+    dθ = θ[2] - θ[1]
+    nθ = length(θ)
+    pgrid::Vector{Float64} = 2π * fftfreq(nθ, 1 / dθ)
+    P::Diagonal{Float64, Vector{Float64}} = Diagonal(pgrid)
+    K::Diagonal{Float64, Vector{Float64}} = Diagonal(pgrid .^ 2 / (2 * mass))
+
+    _Ψ = Array{ComplexF64}(undef, nθ)
+    fft_op = plan_fft!(_Ψ)
+    ifft_op = plan_ifft!(_Ψ)
+    transforms = (Ψ -> fft_op * Ψ, Ψ -> ifft_op * Ψ)
+
+    K′::Diagonal{Float64, Vector{Float64}} = K - Ω * P
+
+    if ω isa Number
+        if direction == 1
+            H = SplitGenerator(K′ + ω * P, V, transforms...)
+        elseif direction == -1
+            H = SplitGenerator(K′ - ω * P, V, transforms...)
+        else
+            error("direction must be ±1")
+        end
+    else
+        if direction == 1
+            H = SplitGenerator(hamiltonian(K′, (P, ω)), V, transforms...)
+        elseif direction == -1
+            H = SplitGenerator(hamiltonian(K′, (-P, ω)), V, transforms...)
+        else
+            error("direction must be ±1")
+        end
+    end
 end

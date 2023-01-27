@@ -122,28 +122,28 @@ function propagate_splitting(
     tlist = collect(range(0, separation_time, length=nt))
     ω_func(t) = omega_ramp_up(t; w0=OMEGA_TARGET, t_r=separation_time)
     θ::Vector{Float64} = collect(range(0, theta_max, length=theta_steps))
-    Ĥ = rotating_tai_hamiltonian(
+    Ĥ = rotating_tai_hamiltonian(
         tlist=tlist,
         V₀=potential_depth,
         θ=θ,
         ω=discretize_on_midpoints(ω_func, tlist)
     )
     if ret == :system
-        return Ĥ, tlist
+        return Ĥ, tlist
     end
-    Ĥ₀ = evaluate(Ĥ, tlist, 1)
-    Ψ₀ = get_ground_state(Ĥ₀, θ, π/8,  d=0.05, steps=10_000)
+    Ĥ₀ = evaluate(Ĥ, tlist, 1)
+    Ψ₀ = get_ground_state(Ĥ₀, θ, π/8,  d=0.05, steps=10_000)
     if ret == :initial_state
         return Ψ₀, θ
     end
-    Ĥ_tgt = evaluate(Ĥ, tlist, nt-1)
-    Ψ_tgt = get_ground_state(Ĥ_tgt, θ, π/8,  d=0.05, steps=10_000)
+    Ĥ_tgt = evaluate(Ĥ, tlist, nt-1)
+    Ψ_tgt = get_ground_state(Ĥ_tgt, θ, π/8,  d=0.05, steps=10_000)
     if ret == :target
         return Ψ_tgt, θ
     end
     Ψ = propagate(
         Ψ₀,
-        Ĥ,
+        Ĥ,
         tlist;
         method=:splitprop,
         kwargs...
@@ -167,16 +167,16 @@ t_r = 100ms;
 V0 = 2.2MHz;
 scale = 300;
 
-Ĥ, tlist = propagate_splitting(t_r, V0; ret=:system)
+Ĥ, tlist = propagate_splitting(t_r, V0; ret=:system)
 Ψ₀, θ = propagate_splitting(t_r, V0; ret=:initial_state)
-V₀ = evaluate(Ĥ, tlist, 1).V.diag
+V₀ = evaluate(Ĥ, tlist, 1).V.diag
 plot(θ ./ π, V₀)
 plot!(θ ./ π, scale .* real.(Ψ₀) .+ minimum(V₀))
 plot!(θ ./ π, scale .* imag.(Ψ₀) .+ minimum(V₀))
 
 Ψ_tgt, θ = propagate_splitting(t_r, V0; ret=:target)
 Ψ_T = propagate_splitting(t_r, V0; ret=:propagation)
-V_tgt = evaluate(Ĥ, tlist, 1000).V.diag
+V_tgt = evaluate(Ĥ, tlist, 1000).V.diag
 scale = 300
 plot(θ ./ π, V_tgt, label="V(θ)")
 #plot!(θ ./ π, scale .* real.(Ψ_tgt) .+ minimum(V_tgt), label="Re[Ψ_tgt]")
@@ -213,16 +213,16 @@ t_r = 0.1μs;
 V0 = 2.2MHz;
 scale = 300;
 
-Ĥ, tlist = propagate_splitting(t_r, V0; ret=:system)
+Ĥ, tlist = propagate_splitting(t_r, V0; ret=:system)
 Ψ₀, θ = propagate_splitting(t_r, V0; ret=:initial_state)
-V₀ = evaluate(Ĥ, tlist, 1).V.diag
+V₀ = evaluate(Ĥ, tlist, 1).V.diag
 plot(θ ./ π, V₀)
 plot!(θ ./ π, scale .* real.(Ψ₀) .+ minimum(V₀))
 plot!(θ ./ π, scale .* imag.(Ψ₀) .+ minimum(V₀))
 
 Ψ_tgt, θ = propagate_splitting(t_r, V0; ret=:target)
 Ψ_T = propagate_splitting(t_r, V0; ret=:propagation)
-V_tgt = evaluate(Ĥ, tlist, 1000).V.diag
+V_tgt = evaluate(Ĥ, tlist, 1000).V.diag
 scale = 300
 plot(θ ./ π, V_tgt, label="V(θ)")
 #plot!(θ ./ π, scale .* real.(Ψ_tgt) .+ minimum(V_tgt), label="Re[Ψ_tgt]")
@@ -254,16 +254,16 @@ t_r = 100ms;
 V0 = 0.1MHz;
 scale = 1;
 
-Ĥ, tlist = propagate_splitting(t_r, V0; ret=:system)
+Ĥ, tlist = propagate_splitting(t_r, V0; ret=:system)
 Ψ₀, θ = propagate_splitting(t_r, V0; ret=:initial_state)
-V₀ = evaluate(Ĥ, tlist, 1).V.diag
+V₀ = evaluate(Ĥ, tlist, 1).V.diag
 plot(θ ./ π, V₀)
 plot!(θ ./ π, scale .* real.(Ψ₀) .+ minimum(V₀))
 plot!(θ ./ π, scale .* imag.(Ψ₀) .+ minimum(V₀))
 
 Ψ_tgt, θ = propagate_splitting(t_r, V0; ret=:target)
 Ψ_T = propagate_splitting(t_r, V0; ret=:propagation)
-V_tgt = evaluate(Ĥ, tlist, 1000).V.diag
+V_tgt = evaluate(Ĥ, tlist, 1000).V.diag
 scale = 300
 plot(θ ./ π, V_tgt, label="V(θ)")
 #plot!(θ ./ π, scale .* real.(Ψ_tgt) .+ minimum(V_tgt), label="Re[Ψ_tgt]")
@@ -289,16 +289,16 @@ t_r = 0.1μs;
 V0 = 0.1MHz;
 scale = 300;
 
-Ĥ, tlist = propagate_splitting(t_r, V0; ret=:system)
+Ĥ, tlist = propagate_splitting(t_r, V0; ret=:system)
 Ψ₀, θ = propagate_splitting(t_r, V0; ret=:initial_state)
-V₀ = evaluate(Ĥ, tlist, 1).V.diag
+V₀ = evaluate(Ĥ, tlist, 1).V.diag
 plot(θ ./ π, V₀)
 plot!(θ ./ π, scale .* real.(Ψ₀) .+ minimum(V₀))
 plot!(θ ./ π, scale .* imag.(Ψ₀) .+ minimum(V₀))
 
 Ψ_tgt, θ = propagate_splitting(t_r, V0; ret=:target)
 Ψ_T = propagate_splitting(t_r, V0; ret=:propagation)
-V_tgt = evaluate(Ĥ, tlist, 1000).V.diag
+V_tgt = evaluate(Ĥ, tlist, 1000).V.diag
 scale = 300
 plot(θ ./ π, V_tgt, label="V(θ)")
 #plot!(θ ./ π, scale .* real.(Ψ_tgt) .+ minimum(V_tgt), label="Re[Ψ_tgt]")
@@ -320,7 +320,29 @@ plot!(; xlabel="momentum", ylabel="amplitude", xlim=(-500, 500))
 
 propagate_splitting(t_r, V0, theta_steps=2048, minimum_timesteps=100_000)
 
+# #### Check Hamiltonian (DEBUG)
+
+function plot_hamiltonian(H, tlist, n; component=:T, compare_to_n=nothing)
+    Ĥ = evaluate(H, tlist, n)
+    Y = getproperty(Ĥ, component).diag
+    label = "$component (n=$n)"
+    if !isnothing(compare_to_n)
+        Y0 = getproperty(evaluate(H, tlist, compare_to_n), component).diag
+        @. Y = Y - Y0
+        label = "Δ$component (n=$compare_to_n → n=$n)"
+    end
+    plot(Y; label)
+end
+
+plot_hamiltonian(Ĥ, tlist, 1)
+
+plot_hamiltonian(Ĥ, tlist, length(tlist)-1)
+
+plot_hamiltonian(Ĥ, tlist, length(tlist)-1; compare_to_n=1)
+
 # ## Map
+
+# ### V0 = 0.1 - 2.2 MHz; sep time = 10⁻¹ - 10⁵ μs
 
 potential_depth_values = collect(range(0.1MHz, 2.2MHz, length=106))
 potential_depth_values ./ MHz
@@ -355,6 +377,8 @@ F = run_or_load("2023-01-05_map_splitting_fidelity.npz"; force=false) do
     map_fidelity(potential_depth_values, separation_time_values)
 end
 
+# #### Countour Plot
+
 contourf(
     separation_time_values ./ sec,
     potential_depth_values ./ MHz,
@@ -367,6 +391,8 @@ contourf(
     xlabel="separation time (seconds)",
     title=raw"Separation Fidelity $|⟨Ψ(t_r) | Ψ_{\textrm{tgt}}⟩|^2$",
 )
+
+# #### 3D Plot
 
 # + active=""
 # plotlyjs()
@@ -489,7 +515,6 @@ function free_time_evolution(Ψ::Vector{ComplexF64}, H::AbstractMatrix, Δt::Flo
     return Ψ_out
 end
 
-# +
 """Propagate Ψ₀ defined on a single surface.
 
 Ψ₀ may or may not be normalized. In general, the population on the surface,
@@ -505,13 +530,17 @@ function prop_scheme(;
     dir=1,
     Ω=0.0,
     m=N_SITES,
-    mass=EFFECTIVE_MASS
+    mass=EFFECTIVE_MASS,
+    method=:splitprop,
+    specrange_method = :arnoldi,
+    nt_loop=2,
+    ret=:state,
+    storages=nothing,
+    kwargs...
 )
-
-    specrange_method = :arnoldi
     nt = choose_timesteps(t_r)
     tlist_ramp_up = collect(range(0, t_r, length=nt))
-    Ĥ_ramp_up = rotating_tai_hamiltonian(;
+    Ĥ_ramp_up = rotating_tai_hamiltonian(;
         tlist=tlist_ramp_up,
         θ,
         Ω,
@@ -521,20 +550,32 @@ function prop_scheme(;
         ),
         direction=dir
     )
-    #t_loop = ...
 
-    Ĥ_loop = rotating_tai_hamiltonian_coord(;
-        tlist=[t_r, t_r + t_loop],
-        θ,
-        Ω,
-        ω=ω₀,
-        V₀=V0,
-        direction=dir
-    )
+    if nt_loop ≤ 2
+        tlist_loop = [t_r, t_r + t_loop]
+        Ĥ_loop = rotating_tai_hamiltonian_coord(;
+            tlist=tlist_loop,
+            θ,
+            Ω,
+            ω=ω₀,
+            V₀=V0,
+            direction=dir
+        )
+    else
+        tlist_loop = collect(range(t_r, t_r + t_loop, length=nt_loop))
+        Ĥ_loop = rotating_tai_hamiltonian(;
+            tlist=tlist_loop,
+            θ,
+            Ω,
+            ω=ω₀,
+            V₀=V0,
+            direction=dir
+        )
+    end
 
     tlist_ramp_down =
         collect(range(t_r + t_loop, 2 * t_r + t_loop, length=length(tlist_ramp_up)))
-    Ĥ_ramp_down = rotating_tai_hamiltonian(;
+    Ĥ_ramp_down = rotating_tai_hamiltonian(;
         tlist=tlist_ramp_down,
         θ,
         Ω,
@@ -545,14 +586,31 @@ function prop_scheme(;
         ),
         direction=dir
     )
+    if ret == :tlist
+        return (tlist_ramp_up, tlist_loop, tlist_ramp_down)
+    end
 
-    Ψ = propagate(Ψ₀, Ĥ_ramp_up, tlist_ramp_up; method=:splitprop, specrange_method)
-    Ψ = free_time_evolution(Ψ, Ĥ_loop, t_loop)
-    Ψ = propagate(Ψ, Ĥ_ramp_down, tlist_ramp_down; method=:splitprop, specrange_method)
-    return Ψ
+    if isnothing(storages)
+        storages = (nothing, nothing, nothing)
+    else
+        if nt_loop ≤ 2
+            error("storages can only be used for nt_loop > 2")
+        end
+    end
 
+    Ψ = propagate(Ψ₀, Ĥ_ramp_up, tlist_ramp_up; method, specrange_method, storage=storages[1], kwargs...)
+    if nt_loop ≤ 2
+        Ψ = free_time_evolution(Ψ, Ĥ_loop, t_loop)
+    else
+        Ψ = propagate(Ψ₀, Ĥ_loop, tlist_loop; method, specrange_method, storage=storages[2], kwargs...)
+    end
+    Ψ = propagate(Ψ, Ĥ_ramp_down, tlist_ramp_down; method, specrange_method, storage=storages[3], kwargs...)
+    if ret == :state
+        return Ψ
+    else
+        error("Invalid ret=$ret")
+    end
 end
-# -
 
 surface_pop(Ψ) = norm(Ψ)^2
 
@@ -669,7 +727,6 @@ contrast_list = run_or_load("2023-01-05_map_splitting_scan_contrast.npz"; force=
     scan_contrast(loop_times, Ω_list)
 end
 
-# +
 plot(
     loop_times ./ ms,
     contrast_list,
@@ -678,13 +735,11 @@ plot(
     legend=false,
     title=raw"Contrast for $t_r$ = 0.1 μs, V₀ = 100 kHz",
 )
-# -
 
 loop_times = collect(range(400ms, 3000ms, step=10ms))
 contrast_list = run_or_load("2023-01-05_map_splitting_scan_contrast_highrez.npz"; force=false) do
     scan_contrast(loop_times, Ω_list)
 end
-# +
 plot(
     loop_times ./ ms,
     contrast_list,
@@ -693,7 +748,6 @@ plot(
     legend=false,
     title=raw"Contrast for $t_r$ = 0.1 μs, V₀ = 100 kHz",
 )
-# -
 
 
 loop_times = collect(range(400ms, 3000ms, step=1ms))
@@ -701,7 +755,6 @@ contrast_list = run_or_load("2023-01-05_map_splitting_scan_contrast_highrez2.npz
     scan_contrast(loop_times, Ω_list)
 end
 
-# +
 plot(
     loop_times ./ ms,
     contrast_list,
@@ -710,7 +763,6 @@ plot(
     legend=false,
     title=raw"Contrast for $t_r$ = 0.1 μs, V₀ = 100 kHz",
 )
-# -
 
 loop_times = collect(range(850ms, 950ms, step=0.1ms))
 @show length(loop_times)
@@ -718,7 +770,6 @@ contrast_list = run_or_load("2023-01-05_map_splitting_scan_contrast_850_950.npz"
     scan_contrast(loop_times, Ω_list)
 end
 
-# +
 plot(
     loop_times ./ ms,
     contrast_list,
@@ -727,7 +778,6 @@ plot(
     legend=false,
     title=raw"Contrast for $t_r$ = 0.1 μs, V₀ = 100 kHz",
 )
-# -
 
 loop_times = collect(range(895ms, 905ms, step=0.01ms))
 @show length(loop_times)
@@ -735,7 +785,6 @@ contrast_list = run_or_load("2023-01-05_map_splitting_scan_contrast_895_905.npz"
     scan_contrast(loop_times, Ω_list)
 end
 
-# +
 plot(
     loop_times ./ ms,
     contrast_list,
@@ -744,7 +793,6 @@ plot(
     legend=false,
     title=raw"Contrast for $t_r$ = 0.1 μs, V₀ = 100 kHz",
 )
-# -
 
 # ### Contrast for exact cycles
 
@@ -893,7 +941,6 @@ contrast_list = run_or_load("2023-01-05_map_splitting_scan_contrast_cycles.npz";
     scan_contrast_for_cycles(cycle_numbers)
 end
 
-# +
 plot(
     cycle_numbers,
     contrast_list;
@@ -903,7 +950,6 @@ plot(
     legend=false,
     title=raw"Contrast for $t_r$ = 0.1 μs, V₀ = 100 kHz",
 )
-# -
 
 # ##### Every 1
 
@@ -913,7 +959,6 @@ contrast_list = run_or_load("2023-01-05_map_splitting_scan_contrast_cycles_1_100
     scan_contrast_for_cycles(cycle_numbers)
 end
 
-# +
 plot(
     cycle_numbers,
     contrast_list;
@@ -923,3 +968,128 @@ plot(
     legend=false,
     title=raw"Contrast for $t_r$ = 0.1 μs, V₀ = 100 kHz",
 )
+
+# ## Full scheme dynamics
+
+# +
+function propagate_full_dynamics(;
+    ω₀=OMEGA_TARGET,
+    θ=collect(range(0, 0.25π, length=1024)),
+    t_r=0.1μs,
+    t_loop=t_loop_for_cycle(10),
+    V0=0.1MHz,
+    Ω=0.0,
+    nt_loop=1001,
+    method=:cheby,
+    parallel=true,
+    uniform_dt_tolerance=1e-8
+)
+
+    U_πhalf = [
+        1/√2  𝕚/√2
+        𝕚/√2  1/√2
+    ]
+
+    Ψright = get_ground_state(; θ, Ω, V₀=V0)
+    Ψleft = zeros(ComplexF64, length(Ψright))
+
+    Ψright, Ψleft = U_πhalf * [Ψright, Ψleft]
+
+    time_grids = prop_scheme(;
+        Ψ₀=Ψright, ω₀, θ, t_r, t_loop, V0, dir=1, Ω=Ω, method, nt_loop, ret=:tlist
+    )
+    tlist_ramp_up, tlist_loop, tlist_ramp_down = time_grids
+    # return tlist_ramp_up, tlist_loop, tlist_ramp_down # DEBUG
+
+    storages_right = (
+        init_storage(Ψright, tlist_ramp_up),
+        init_storage(Ψright, tlist_loop),
+        init_storage(Ψright, tlist_ramp_down)
+    )
+    storages_left = (
+        init_storage(Ψright, tlist_ramp_up),  # Ψright is fine for initialization
+        init_storage(Ψright, tlist_loop),
+        init_storage(Ψright, tlist_ramp_down)
+    )
+
+    if parallel
+        prop_right = Threads.@spawn prop_scheme(;
+            Ψ₀=Ψright, ω₀, θ, t_r, t_loop, V0, dir=1, Ω=Ω, method, nt_loop,
+            storages=storages_right, uniform_dt_tolerance,
+        )
+        prop_left = Threads.@spawn prop_scheme(;
+            Ψ₀=Ψleft, ω₀, θ, t_r, t_loop, V0, dir=-1, Ω=Ω, method, nt_loop,
+            storages=storages_left, uniform_dt_tolerance
+        )
+        Ψright = fetch(prop_right)
+        Ψleft = fetch(prop_left)
+    else
+        Ψright = prop_scheme(;
+            Ψ₀=Ψright, ω₀, θ, t_r, t_loop, V0, dir=1, Ω=Ω, method, nt_loop,
+            storages=storages_right, uniform_dt_tolerance
+        )
+        Ψleft = prop_scheme(;
+            Ψ₀=Ψleft, ω₀, θ, t_r, t_loop, V0, dir=-1, Ω=Ω, method, nt_loop,
+            storages=storages_left, uniform_dt_tolerance
+        )
+    end
+
+    return time_grids, storages_right, storages_left
+
+end
+# -
+
+using FileIO
+
+full_dynamics = run_or_load(
+    "2023-01-05_map_splitting_full_dynamics.jld2";
+    save=FileIO.save, load=FileIO.load, force=false
+) do
+    time_grids, storages_right, storages_left = propagate_full_dynamics()
+    return Dict(
+        "time_grids" => time_grids,
+        "storages_right" => storages_right,
+        "storages_left" => storages_left,
+    )
+end
+
+sum([length(tlist) for tlist in full_dynamics["time_grids"]])
+
+V₀
+
+θ
+
+using Printf
+
+function plot_full_dynamics_frame(full_dynamics, n; V₀=V₀, θ=θ, scale=10)
+    tlist_ramp_up, tlist_loop, tlist_ramp_down = full_dynamics["time_grids"]
+    seg_labels = ["split", "loop", "recomb"]
+    segment = 1
+    if n > length(tlist_ramp_up)
+        segment = 2
+        n = n - length(tlist_ramp_up)
+    end
+    if n > length(tlist_loop)
+        segment = 3
+        n = n - length(tlist_loop)
+    end
+    t = full_dynamics["time_grids"][segment][n] / sec
+    offset = minimum(V₀) / MHz
+    Ψ_left = full_dynamics["storages_left"][segment]
+    Ψ_right = full_dynamics["storages_right"][segment]
+    fig = plot(θ ./ π, V₀ / MHz, xlabel="θ/π", ylabel="Energy (MHz)", label="",
+               title="[$(seg_labels[segment])] t=$(@sprintf("%.2e", t)) s")
+    plot!(fig, θ ./ π, scale * abs2.(Ψ_left[:, n]) .+ offset, label="|Ψₗ|²")
+    plot!(fig, θ ./ π, scale * abs2.(Ψ_right[:, n]) .+ offset, label="|Ψᵣ|²")
+    plot!(fig, ylim=(-0.11, 0.18), xlim=(0.10, 0.15))
+end
+
+nt_total = sum([length(tlist) for tlist in full_dynamics["time_grids"]])
+anim = @animate for n = 1:nt_total
+    plot_full_dynamics_frame(full_dynamics, n)
+end
+gif(anim, "anim.gif", fps=10)
+
+mp4(anim, "anim.mp4", fps=10)
+
+
