@@ -1,8 +1,7 @@
 using LinearAlgebra
 using QuantumPropagators
 using QuantumPropagators: Operator, Generator
-import QuantumPropagators.Controls:
-    get_controls, evaluate, evaluate!, substitute
+import QuantumPropagators.Controls: get_controls, evaluate, evaluate!, substitute
 import QuantumControlBase: get_control_deriv, dynamical_generator_adjoint
 
 
@@ -19,8 +18,8 @@ struct SplitOperator{TT,TV}
     to_p!::Function # coord to momentum
     to_x!::Function # momentum to coord
     function SplitOperator(T, V, to_p!, to_x!)
-        T::Union{Nothing, Diagonal{Float64,Vector{Float64}}}
-        V::Union{Nothing, Diagonal{Float64,Vector{Float64}}}
+        T::Union{Nothing,Diagonal{Float64,Vector{Float64}}}
+        V::Union{Nothing,Diagonal{Float64,Vector{Float64}}}
         # ishermitian depends on these type-asserts
         new{typeof(T),typeof(V)}(T, V, to_p!, to_x!)
     end
@@ -28,7 +27,7 @@ end
 
 
 Base.size(O::SplitOperator{TT,VT}) where {TT,VT} = size(O.T)
-Base.size(O::SplitOperator{Nothing, VT}) where {VT} = size(O.V)
+Base.size(O::SplitOperator{Nothing,VT}) where {VT} = size(O.V)
 Base.size(O::SplitOperator{Nothing,Nothing}) = 0
 
 
@@ -47,12 +46,12 @@ function LinearAlgebra.mul!(C, A::SplitOperator, B, α, β)
 end
 
 # Potential only
-function LinearAlgebra.mul!(C, A::SplitOperator{Nothing, TV}, B, α, β) where {TV}
+function LinearAlgebra.mul!(C, A::SplitOperator{Nothing,TV}, B, α, β) where {TV}
     mul!(C, A.V, B, α, β)
 end
 
 # Momentum space operator only
-function LinearAlgebra.mul!(C, A::SplitOperator{TT, Nothing}, B, α, β) where {TT}
+function LinearAlgebra.mul!(C, A::SplitOperator{TT,Nothing}, B, α, β) where {TT}
     A.to_p!(B)
     A.to_p!(C)
     mul!(C, A.T, B, α, β)
@@ -62,7 +61,7 @@ function LinearAlgebra.mul!(C, A::SplitOperator{TT, Nothing}, B, α, β) where {
 end
 
 # Zero operator
-function LinearAlgebra.mul!(C, A::SplitOperator{Nothing, Nothing}, B, α, β)
+function LinearAlgebra.mul!(C, A::SplitOperator{Nothing,Nothing}, B, α, β)
     lmul!(β, C)
 end
 
@@ -75,7 +74,7 @@ function Base.:*(H::SplitOperator, Ψ)
 end
 
 
-get_controls(::SplitOperator) = ( );
+get_controls(::SplitOperator) = ();
 
 evaluate(O::SplitOperator, args...; kwargs...) = O;
 
@@ -132,11 +131,11 @@ end
 
 
 function evaluate!(
-    op::Diagonal{Float64, Vector{Float64}},
-    gen::Generator{Diagonal{Float64, Vector{Float64}}, CT},
+    op::Diagonal{Float64,Vector{Float64}},
+    gen::Generator{Diagonal{Float64,Vector{Float64}},CT},
     tlist::Vector{Float64},
     n::Int64;
-    vals_dict=IdDict(),
+    vals_dict=IdDict()
 ) where {CT}
     if (length(gen.ops) == 2) && (length(gen.amplitudes) == 1)
         op.diag .= gen.ops[1].diag
@@ -202,7 +201,7 @@ struct RotTAI_PotentialGenerator
     phi # control
     Omega::Float64
     direction::Int64
-    function RotTAI_PotentialGenerator(;V0, m, theta, phi, Omega=0.0, direction=1)
+    function RotTAI_PotentialGenerator(; V0, m, theta, phi, Omega=0.0, direction=1)
         new(V0, m, theta, phi, Omega, direction)
     end
 end
@@ -240,7 +239,6 @@ function evaluate!(
     gen::RotTAI_PotentialGenerator,
     args...;
     kwargs...
-
 )
     V₀::Float64 = gen.V0
     m::Int64 = gen.m
@@ -336,14 +334,14 @@ for which the ground state should be obtained.
 The state is obtained with imaginary split propagation with the given number of
 `steps`.
 """
-function get_ground_state(Ĥ₀::SplitOperator, theta_grid, θ₀=2π/16; steps=10000, d=0.05)
+function get_ground_state(Ĥ₀::SplitOperator, theta_grid, θ₀=2π / 16; steps=10000, d=0.05)
     h = -1im
     Uk2 = exp(-0.5im * h * Ĥ₀.T)
     Uk = exp(-1im * h * Ĥ₀.T)
     Ux = exp(-1im * h * Ĥ₀.V)
     θ = theta_grid
 
-    Ψ = convert(Array{ComplexF64}, exp.(-(θ .- θ₀).^2/d^2))
+    Ψ = convert(Array{ComplexF64}, exp.(-(θ .- θ₀) .^ 2 / d^2))
     normalize!(Ψ)
 
     fft = plan_fft!(Ψ)
@@ -351,7 +349,7 @@ function get_ground_state(Ĥ₀::SplitOperator, theta_grid, θ₀=2π/16; steps
 
     Ψ = fft * Ψ
 
-    for i=1:steps
+    for i = 1:steps
         @. Ψ = Uk2.diag * Ψ
         Ψ = ifft * Ψ
         @. Ψ = Ux.diag * Ψ
@@ -379,7 +377,7 @@ function rotating_tai_hamiltonian(;
     number_of_sites,
     mass,
     Ω=0.0,
-    direction=1,
+    direction=1
 )
 
     m = number_of_sites
@@ -388,18 +386,18 @@ function rotating_tai_hamiltonian(;
 
     V = Diagonal(V₀ .* cos.(m .* θ))
 
-    dθ = θ[2] - θ[1]
-    nθ = length(θ)
-    pgrid::Vector{Float64} = 2π * fftfreq(nθ, 1 / dθ)
-    P::Diagonal{Float64, Vector{Float64}} = Diagonal(pgrid)
-    K::Diagonal{Float64, Vector{Float64}} = Diagonal(pgrid .^ 2 / (2 * mass))
+    dθ                                   = θ[2] - θ[1]
+    nθ                                   = length(θ)
+    pgrid::Vector{Float64}               = 2π * fftfreq(nθ, 1 / dθ)
+    P::Diagonal{Float64,Vector{Float64}} = Diagonal(pgrid)
+    K::Diagonal{Float64,Vector{Float64}} = Diagonal(pgrid .^ 2 / (2 * mass))
 
     _Ψ = Array{ComplexF64}(undef, nθ)
     fft_op = plan_fft!(_Ψ)
     ifft_op = plan_ifft!(_Ψ)
     transforms = (Ψ -> fft_op * Ψ, Ψ -> ifft_op * Ψ)
 
-    K′::Diagonal{Float64, Vector{Float64}} = K - Ω * P
+    K′::Diagonal{Float64,Vector{Float64}} = K - Ω * P
 
     if ω isa Number
         if direction == 1

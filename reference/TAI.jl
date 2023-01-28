@@ -21,15 +21,15 @@ Plots.default(
     linewidth=3,
     size=(550, 300),
     framestyle=:box,
-    background_color=RGBA(1,1,1,0),
+    background_color=RGBA(1, 1, 1, 0),
     foreground_color=:black
 )
 
 function plot_dyn(wrk, zlist)
 
     heatmap(
-        wrk.zgrid/μm,
-        wrk.tlist/ms,
+        wrk.zgrid / μm,
+        wrk.tlist / ms,
         abs2.(wrk.Ψ_list'),
         # xlim=(-10, 60),
         xlabel="z (μm)",
@@ -39,7 +39,7 @@ function plot_dyn(wrk, zlist)
         right_margin=10mm
     )
 
-    plot!(zlist/μm, tlist/ms, label="", color=:black, linestyle=:dash)
+    plot!(zlist / μm, tlist / ms, label="", color=:black, linestyle=:dash)
 end
 
 mutable struct Wrk
@@ -74,10 +74,10 @@ mutable struct Wrk
         zgrid = collect(range(zmin, zmax, nz))
         dz = zgrid[2] - zgrid[1]
 
-        pgrid = 2π * fftfreq(nz, 1/dz)
-        K = pgrid.^2 / 2 / Rb_mass;
+        pgrid = 2π * fftfreq(nz, 1 / dz)
+        K = pgrid .^ 2 / 2 / Rb_mass
 
-        Ψrand=rand(ComplexF64, nz);
+        Ψrand = rand(ComplexF64, nz)
         normalize!(Ψrand)
 
         to_p! = plan_fft!(Ψrand)
@@ -101,7 +101,8 @@ mutable struct Wrk
 
         function eval_dUx!(Ψ, z0)
             for i = 1:nz
-                @inbounds Ψ[i] *= -1im * h * exp(-1im * h * V(zgrid[i]; z0=z0)) * dV(zgrid[i]; z0=z0)
+                @inbounds Ψ[i] *=
+                    -1im * h * exp(-1im * h * V(zgrid[i]; z0=z0)) * dV(zgrid[i]; z0=z0)
             end
         end
 
@@ -150,12 +151,12 @@ function get_ground_state(wrk, z0=0; steps=10000, d=1.0, h0=1)
     Uk = exp.(-1im * h * wrk.K)
     Ux = exp.(-1im * h * wrk.Vx)
 
-    Ψx = convert(Array{ComplexF64}, exp.(-(wrk.zgrid .- z0).^2/d^2))
+    Ψx = convert(Array{ComplexF64}, exp.(-(wrk.zgrid .- z0) .^ 2 / d^2))
     normalize!(Ψx)
 
     Ψk = fft(Ψx)
 
-    for i=1:steps
+    for i = 1:steps
         Ψk = Uk2 .* Ψk
         Ψx = ifft(Ψk)
         Ψx = Ux .* Ψx
@@ -194,12 +195,12 @@ end
 function propagate(wrk, Ψx0, zlist; save=true)
     Ψx = copy(Ψx0)
     if save
-        for (i, z0) = enumerate(zlist)
+        for (i, z0) in enumerate(zlist)
             step!(wrk, Ψx, z0)
             wrk.Ψ_list[:, i] .= Ψx
         end
     else
-        for z0 = zlist
+        for z0 in zlist
             step!(wrk, Ψx, z0)
         end
     end
@@ -230,7 +231,7 @@ function df(wrk, Ψx0, Ψxt, zlist; acc=false, cal_val=false)
     end
 
     z0 = zlist[end]
-    wrk.χx .= 2 * (Ψxt'*(@view wrk.Ψ_list[:, end])) * Ψxt
+    wrk.χx .= 2 * (Ψxt' * (@view wrk.Ψ_list[:, end])) * Ψxt
 
     for i = length(zlist)-1:-1:2
         step!(wrk, wrk.χx, z0; h=-wrk.h)
@@ -275,12 +276,12 @@ function dg(wrk, Ψx0, Ψxt, zlist; acc=false, cal_val=false)
     end
 
     z0 = zlist[end]
-    wrk.χx .= 2 * (Ψxt'*(@view wrk.Ψ_list[:, end])) * Ψxt
+    wrk.χx .= 2 * (Ψxt' * (@view wrk.Ψ_list[:, end])) * Ψxt
 
     for i = length(zlist)-1:-1:2
         step!(wrk, wrk.χx, z0; h=-wrk.h)
         z0 = zlist[i]
-        wrk.χx .+= 2 * (Ψxt'*(@view wrk.Ψ_list[:, i])) * Ψxt
+        wrk.χx .+= 2 * (Ψxt' * (@view wrk.Ψ_list[:, i])) * Ψxt
         wrk.Ψaux .= @view wrk.Ψ_list[:, i-1]
         dstep!(wrk, wrk.Ψaux, z0)
         if !acc
@@ -304,15 +305,15 @@ Zygote.@adjoint function g(wrk, Ψx0, Ψxt, zlist)
 
     function g_pullback(Ω̄)
         z0 = zlist[end]
-        wrk.χx .= 2 * (Ψxt'*(@view wrk.Ψ_list[:, end])) * Ψxt
+        wrk.χx .= 2 * (Ψxt' * (@view wrk.Ψ_list[:, end])) * Ψxt
 
         for i = length(zlist)-1:-1:2
             step!(wrk, wrk.χx, z0; h=-wrk.h)
             z0 = zlist[i]
-            wrk.χx .+= 2 * (Ψxt'*(@view wrk.Ψ_list[:, i])) * Ψxt
+            wrk.χx .+= 2 * (Ψxt' * (@view wrk.Ψ_list[:, i])) * Ψxt
             wrk.Ψaux .= @view wrk.Ψ_list[:, i-1]
             dstep!(wrk, wrk.Ψaux, z0)
-            wrk.grad[i] = - real(wrk.χx' * wrk.Ψaux) / length(tlist)
+            wrk.grad[i] = -real(wrk.χx' * wrk.Ψaux) / length(tlist)
         end
 
         return nothing, nothing, nothing, Ω̄' * wrk.grad
@@ -323,7 +324,7 @@ end
 function u(wrk, zlist; α=1)
     u_val = 0
     for i = 1:length(zlist)-1
-        u_val += (zlist[i+1]-zlist[i])^2
+        u_val += (zlist[i+1] - zlist[i])^2
     end
     α * u_val / length(zlist) #/ wrk.h^2
 end
@@ -345,8 +346,8 @@ function du(wrk, zlist; α=1, acc=false, cal_val=false)
         if !acc
             wrk.grad[i] = 0
         end
-        wrk.grad[i] -= 2α*(zlist[i+1]-zlist[i]) / length(zlist) #/ wrk.h^2
-        wrk.grad[i+1] += 2α*(zlist[i+1]-zlist[i]) / length(zlist) #/ wrk.h^2
+        wrk.grad[i] -= 2α * (zlist[i+1] - zlist[i]) / length(zlist) #/ wrk.h^2
+        wrk.grad[i+1] += 2α * (zlist[i+1] - zlist[i]) / length(zlist) #/ wrk.h^2
     end
     wrk.grad[1] = 0
     wrk.grad[length(zlist)] = 0
@@ -367,9 +368,9 @@ function custom_optimize(f, df, zlist_guess; attempts=1, maxiter=15000, pgtol=1e
     # set up bounds
     bounds = zeros(3, length(zlist))
     for i = 1:length(zlist)
-        bounds[1,i] = 0
-        bounds[2,i] = - 10μm
-        bounds[3,i] = 60μm
+        bounds[1, i] = 0
+        bounds[2, i] = -10μm
+        bounds[3, i] = 60μm
     end
 
     fout_best = f(zlist_guess)
@@ -389,7 +390,7 @@ function custom_optimize(f, df, zlist_guess; attempts=1, maxiter=15000, pgtol=1e
             iprint=-1,
             maxfun=15000,
             maxiter=maxiter
-        );
+        )
 
         if fout < fout_best
             fout_best = fout

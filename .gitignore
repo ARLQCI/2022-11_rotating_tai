@@ -4,8 +4,10 @@
 .ipynb_checkpoints
 /2022*.ipynb
 /2023*.ipynb
+/*.mp4
 /*.gif
 /Manifest.toml
+/LocalPreferences.toml
 /examples/dump/
 /test/Manifest.toml
 /test/examples/

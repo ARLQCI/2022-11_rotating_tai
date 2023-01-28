@@ -46,9 +46,9 @@ const OMEGA_TARGET = 10π / sec;
 const EFFECTIVE_MASS = TAI_RADIUS^2 * RUBIDIUM_MASS;
 const POTENTIAL_DEPTH = 0.1MHz;
 
-includet("./rotating_tai.jl");
+includet("./include/rotating_tai.jl");
 
-includet("./split_propagator.jl")
+includet("./include/split_propagator.jl")
 
 # ## Hamiltonian
 
@@ -58,25 +58,22 @@ omega_ramp_up(t; w0=OMEGA_TARGET, t_r=SEPARATION_TIME) = w0 * sin(π * t / (2t_r
 omega_ramp_down(t; w0=OMEGA_TARGET, t_r=SEPARATION_TIME) = w0 * cos(π * t / (2t_r))^2;
 
 function choose_timesteps(separation_time; timesteps_per_microsec=1, minimum_timesteps=1001)
-    return max(
-        minimum_timesteps,
-        Int(separation_time ÷ μs) * timesteps_per_microsec + 1
-    )
+    return max(minimum_timesteps, Int(separation_time ÷ μs) * timesteps_per_microsec + 1)
 end
 
 function propagate_splitting(
-        separation_time=SEPARATION_TIME,
-        potential_depth=POTENTIAL_DEPTH;
-        omega_target=OMEGA_TARGET,
-        number_of_sites=N_SITES,
-        mass=EFFECTIVE_MASS,
-        ret=:fidelity,
-        timesteps_per_microsec=1,
-        minimum_timesteps=1001,
-        theta_max=0.25π,
-        theta_steps=1024,
-        kwargs...
-    )
+    separation_time=SEPARATION_TIME,
+    potential_depth=POTENTIAL_DEPTH;
+    omega_target=OMEGA_TARGET,
+    number_of_sites=N_SITES,
+    mass=EFFECTIVE_MASS,
+    ret=:fidelity,
+    timesteps_per_microsec=1,
+    minimum_timesteps=1001,
+    theta_max=0.25π,
+    theta_steps=1024,
+    kwargs...
+)
     nt = choose_timesteps(separation_time; timesteps_per_microsec, minimum_timesteps)
     tlist = collect(range(0, separation_time, length=nt))
     ω_func(t) = omega_ramp_up(t; w0=omega_target, t_r=separation_time)
@@ -93,25 +90,19 @@ function propagate_splitting(
         return Ĥ, tlist
     end
     Ĥ₀ = evaluate(Ĥ, tlist, 1)
-    Ψ₀ = get_ground_state(Ĥ₀, θ, π/8,  d=0.05, steps=10_000)
+    Ψ₀ = get_ground_state(Ĥ₀, θ, π / 8, d=0.05, steps=10_000)
     if ret == :initial_state
         return Ψ₀, θ
     end
-    Ĥ_tgt = evaluate(Ĥ, tlist, nt-1)
+    Ĥ_tgt = evaluate(Ĥ, tlist, nt - 1)
     if ret == :H_tgt
         return Ĥ_tgt
     end
-    Ψ_tgt = get_ground_state(Ĥ_tgt, θ, π/8,  d=0.05, steps=10_000)
+    Ψ_tgt = get_ground_state(Ĥ_tgt, θ, π / 8, d=0.05, steps=10_000)
     if ret == :target
         return Ψ_tgt, θ
     end
-    Ψ = propagate(
-        Ψ₀,
-        Ĥ,
-        tlist;
-        method=:splitprop,
-        kwargs...
-    )
+    Ψ = propagate(Ψ₀, Ĥ, tlist; method=:splitprop, kwargs...)
     if ret == :propagation
         return Ψ
     end
@@ -139,17 +130,17 @@ end
 
 plot_hamiltonian(HAMILTONIAN, TIME_GRID, 1)
 
-plot_hamiltonian(HAMILTONIAN, TIME_GRID, length(TIME_GRID)-1)
+plot_hamiltonian(HAMILTONIAN, TIME_GRID, length(TIME_GRID) - 1)
 
-plot_hamiltonian(HAMILTONIAN, TIME_GRID, length(TIME_GRID)-1; compare_to_n=1)
+plot_hamiltonian(HAMILTONIAN, TIME_GRID, length(TIME_GRID) - 1; compare_to_n=1)
 
 # ## Initial state
 
-INITIAL_STATE, THETA_GRID = propagate_splitting(;ret=:initial_state);
+INITIAL_STATE, THETA_GRID = propagate_splitting(; ret=:initial_state);
 
 # ## Target state
 
-TARGET_STATE, _ = propagate_splitting(;ret=:target);
+TARGET_STATE, _ = propagate_splitting(; ret=:target);
 
 function psi_to_momentum(Ψ, θ)
     dθ = θ[2] - θ[1]
@@ -160,8 +151,9 @@ function psi_to_momentum(Ψ, θ)
 end
 
 function plot_states_in_momentum_space(
-    θ, states...;
-    labels=["Ψ$i" for i=1:length(states)],
+    θ,
+    states...;
+    labels=["Ψ$i" for i = 1:length(states)],
     marker=(-EFFECTIVE_MASS * OMEGA_TARGET),
     marker_label=raw"$Mω_0$",
     kwargs...
@@ -178,7 +170,9 @@ function plot_states_in_momentum_space(
 end
 
 plot_states_in_momentum_space(
-    THETA_GRID, INITIAL_STATE, TARGET_STATE;
+    THETA_GRID,
+    INITIAL_STATE,
+    TARGET_STATE;
     labels=["Ψ₀", "Ψtgt"],
     xlim=(-500, 500)
 )
@@ -194,21 +188,21 @@ See `map_observables`.
 """
 struct PositionMomentumObservables
 
-    theta_op::Diagonal{Float64, Vector{Float64}}
-    theta_sq_op::Diagonal{Float64, Vector{Float64}}
+    theta_op::Diagonal{Float64,Vector{Float64}}
+    theta_sq_op::Diagonal{Float64,Vector{Float64}}
     momentum_grid::Vector{Float64}
     coordinate_state::Vector{ComplexF64}
     momentum_state::Vector{ComplexF64}
     vals::Vector{Float64}
     FFT
     IFFT
-    
-    function PositionMomentumObservables(;theta_grid::Vector{Float64})
+
+    function PositionMomentumObservables(; theta_grid::Vector{Float64})
         θ = theta_grid
         dθ = θ[2] - θ[1]
         nθ = length(theta_grid)
         momentum_grid::Vector{Float64} = 2π * fftfreq(nθ, 1 / dθ)
-        theta_grid_sq = theta_grid.^2
+        theta_grid_sq = theta_grid .^ 2
         coordinate_state = zeros(ComplexF64, nθ)
         momentum_state = zeros(ComplexF64, nθ)
         vals = zeros(4)
@@ -237,10 +231,7 @@ import QuantumPropagators.Storage: map_observables
 The values `σ_θ` and `σ_p` are the standard deviations from the expectation
 values ⟨θ⟩ and ⟨p⟩
 """
-function map_observables(
-    observables::PositionMomentumObservables,
-    Ψ
-)
+function map_observables(observables::PositionMomentumObservables, Ψ)
     # θ expectation value
     exp_val_theta = real(dot(Ψ, observables.theta_op, Ψ))
     exp_val_theta_sq = real(dot(Ψ, observables.theta_sq_op, Ψ))
@@ -268,7 +259,7 @@ function map_observables(
 end
 # -
 
-POSITION_MOMENTUM_OBSERVABLES = PositionMomentumObservables(;theta_grid=THETA_GRID);
+POSITION_MOMENTUM_OBSERVABLES = PositionMomentumObservables(; theta_grid=THETA_GRID);
 
 map_observables(POSITION_MOMENTUM_OBSERVABLES, INITIAL_STATE)
 
@@ -277,7 +268,7 @@ map_observables(POSITION_MOMENTUM_OBSERVABLES, TARGET_STATE)
 expval_dynamics = propagate_splitting(;
     observables=POSITION_MOMENTUM_OBSERVABLES,
     storage=true,
-    ret=:propagation,
+    ret=:propagation
 )
 
 # +
@@ -291,9 +282,9 @@ function get_expval_dynamics(;
     show_standard_deviations=false,
     kwargs...
 )
-    
+
     θ::Vector{Float64} = collect(range(0, theta_max, length=theta_steps))
-    observables = PositionMomentumObservables(;theta_grid=θ)
+    observables = PositionMomentumObservables(; theta_grid=θ)
     expvals = propagate_splitting(;
         separation_time,
         theta_max,
@@ -305,45 +296,30 @@ function get_expval_dynamics(;
         ret=:propagation,
         kwargs...
     )
-    
+
     if show
-        nt = choose_timesteps(
-            separation_time;
-            timesteps_per_microsec,
-            minimum_timesteps
-        )
+        nt = choose_timesteps(separation_time; timesteps_per_microsec, minimum_timesteps)
         tlist = collect(range(0, separation_time, length=nt))
         plot_expval_dynamics(tlist, expvals; show_standard_deviations)
     else
         return expvals
     end
-    
+
 end
 # -
 
 function plot_expval_dynamics(tlist, expvals; show_standard_deviations=false)
-    θ = @view expvals[1,:]
-    σ_θ = @view expvals[2,:]
-    p = @view expvals[3,:]
-    σ_p = @view expvals[4,:]
+    θ = @view expvals[1, :]
+    σ_θ = @view expvals[2, :]
+    p = @view expvals[3, :]
+    σ_p = @view expvals[4, :]
     if show_standard_deviations
-        ax_pos = plot(
-            tlist, θ./π; ribbon=σ_θ./π, label="",
-            xlabel="time", ylabel="θ (π)"
-        )
-        ax_mom = plot(
-            tlist, p; ribbon=σ_p, label="",
-            xlabel="time", ylabel="momentum"
-        )
+        ax_pos =
+            plot(tlist, θ ./ π; ribbon=σ_θ ./ π, label="", xlabel="time", ylabel="θ (π)")
+        ax_mom = plot(tlist, p; ribbon=σ_p, label="", xlabel="time", ylabel="momentum")
     else
-        ax_pos = plot(
-            tlist, θ./π; label="",
-            xlabel="time", ylabel="θ (π)"
-        )
-        ax_mom = plot(
-            tlist, p; label="",
-            xlabel="time", ylabel="momentum"
-        )
+        ax_pos = plot(tlist, θ ./ π; label="", xlabel="time", ylabel="θ (π)")
+        ax_mom = plot(tlist, p; label="", xlabel="time", ylabel="momentum")
     end
     plot(ax_pos, ax_mom)
 end
@@ -356,15 +332,18 @@ using QuantumControl
 
 using QuantumControl.Functionals: J_T_sm
 
-includet("./guided_amplitude.jl")
+includet("./include/guided_amplitude.jl")
 
 function set_guided_control(H, tlist)
     S(t) = QuantumControl.Shapes.flattop(
-        t, T=tlist[end], t_rise=0.2*tlist[end], func=:blackman
+        t,
+        T=tlist[end],
+        t_rise=0.2 * tlist[end],
+        func=:blackman
     )
     ω_vals::Vector{Float64} = get_controls(H)[1]
     @assert length(ω_vals) == length(tlist) - 1
-    control = GuidedAmplitude(t->0.0, tlist; guide=omega_ramp_up, shape=S)
+    control = GuidedAmplitude(t -> 0.0, tlist; guide=omega_ramp_up, shape=S)
     return substitute(H, IdDict(ω_vals => control))
 end
 
@@ -383,9 +362,7 @@ problem = ControlProblem(;
     J_T=J_T_sm,
     prop_method=:splitprop,
     verbose=true,
-    pulse_options=IdDict(
-        δω => Dict(:lambda_a => 0.3, :update_shape => t->1.0)
-    ),
+    pulse_options=IdDict(δω => Dict(:lambda_a => 0.3, :update_shape => t -> 1.0)),
     #specrange_method=:manual,
     #check_normalization=true,
     check_convergence=res -> begin

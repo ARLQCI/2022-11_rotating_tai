@@ -1,5 +1,10 @@
 using QuantumPropagators:
-    PWCPropagator, _pwc_set_t!, _pwc_set_genop!, _pwc_get_max_genop, _pwc_process_parameters, _pwc_advance_time!
+    PWCPropagator,
+    _pwc_set_t!,
+    _pwc_set_genop!,
+    _pwc_get_max_genop,
+    _pwc_process_parameters,
+    _pwc_advance_time!
 import QuantumPropagators: init_prop, set_t!, prop_step!
 
 
@@ -8,8 +13,8 @@ import QuantumPropagators: init_prop, set_t!, prop_step!
 struct SplitPropWrk
 
     dt::Float64
-    UT_op::Diagonal{ComplexF64, Vector{ComplexF64}}
-    UV2_op::Diagonal{ComplexF64, Vector{ComplexF64}}
+    UT_op::Diagonal{ComplexF64,Vector{ComplexF64}}
+    UV2_op::Diagonal{ComplexF64,Vector{ComplexF64}}
     T_is_static::Bool
     V_is_static::Bool
 

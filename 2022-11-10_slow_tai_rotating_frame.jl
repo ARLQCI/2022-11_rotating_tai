@@ -9,7 +9,7 @@
 #       format_version: '1.5'
 #       jupytext_version: 1.11.3
 #   kernelspec:
-#     display_name: Julia 1.8 (4 threads)
+#     display_name: Julia 1.8 (auto threads)
 #     language: julia
 #     name: julia-1.8-multithread
 # ---
@@ -60,10 +60,10 @@ const OMEGA_TARGET = 2π / sec;
 const EFFECTIVE_MASS = TAI_RADIUS^2 * RUBIDIUM_MASS;
 const POTENTIAL_DEPTH = 2.2MHz;
 
-includet("./rotating_tai.jl")
+includet("./include/rotating_tai.jl")
 
 
-includet("./split_propagator.jl")
+includet("./include/split_propagator.jl")
 
 tlist = collect(range(0, SEPARATION_TIME, length=(Int(SEPARATION_TIME ÷ ms) * 1000 + 1)));
 theta_grid = collect(range(0, 0.25π, length=512));
@@ -321,7 +321,7 @@ function prop_ramp_up_ramp_down(;
         θ,
         Ω,
         ω=discretize_on_midpoints(t -> omega_ramp_up(t; w0=ω₀, t_r=t_r), tlist_ramp_up),
-        direction=dir,
+        direction=dir
     )
     #t_loop = ...
 
@@ -335,7 +335,7 @@ function prop_ramp_up_ramp_down(;
             t -> omega_ramp_down(t - t_r - t_loop; w0=ω₀, t_r=t_r),
             tlist_ramp_down
         ),
-        direction=dir,
+        direction=dir
     )
 
     Ψ = propagate(Ψ₀, Ĥ_ramp_up, tlist_ramp_up; method=:splitprop, specrange_method)
@@ -345,13 +345,15 @@ function prop_ramp_up_ramp_down(;
 end
 # -
 
-Ψ_up_down1 = prop_ramp_up_ramp_down(;Ψ₀, ω₀=OMEGA_TARGET, θ=theta_grid, t_r=SEPARATION_TIME, dir=1);
+Ψ_up_down1 =
+    prop_ramp_up_ramp_down(; Ψ₀, ω₀=OMEGA_TARGET, θ=theta_grid, t_r=SEPARATION_TIME, dir=1);
 
 angle(Ψ_up_down1 ⋅ Ψ₀) / π
 
 abs2(Ψ_up_down1 ⋅ Ψ₀)
 
-Ψ_up_down2 = prop_ramp_up_ramp_down(;Ψ₀, ω₀=OMEGA_TARGET, θ=theta_grid, t_r=SEPARATION_TIME, dir=-1);
+Ψ_up_down2 =
+    prop_ramp_up_ramp_down(; Ψ₀, ω₀=OMEGA_TARGET, θ=theta_grid, t_r=SEPARATION_TIME, dir=-1);
 
 angle(Ψ_up_down2 ⋅ Ψ₀) / π
 
@@ -407,7 +409,7 @@ function prop_scheme(;
         θ,
         Ω,
         ω=discretize_on_midpoints(t -> omega_ramp_up(t; w0=ω₀, t_r=t_r), tlist_ramp_up),
-        direction=dir,
+        direction=dir
     )
     #t_loop = ...
 
@@ -448,8 +450,7 @@ function angular_displacement(; ω₀, t_r, t_loop)
     dt_up = tlist_ramp_up[2] - tlist_ramp_up[1]
     ω_up = discretize_on_midpoints(t -> omega_ramp_up(t; w0=ω₀, t_r=t_r), tlist_ramp_up)
 
-    tlist_ramp_down =
-        collect(range(t_r + t_loop, 2 * t_r + t_loop, length=nt))
+    tlist_ramp_down = collect(range(t_r + t_loop, 2 * t_r + t_loop, length=nt))
     dt_down = tlist_ramp_down[2] - tlist_ramp_down[1]
     ω_down = discretize_on_midpoints(
         t -> omega_ramp_down(t - t_r - t_loop; w0=ω₀, t_r=t_r),
@@ -470,7 +471,7 @@ function angular_displacement(; ω₀, t_r, t_loop)
     return Φ
 end
 
-angular_displacement(ω₀=OMEGA_TARGET,t_r=SEPARATION_TIME, t_loop=LOOP_TIME) / π ###
+angular_displacement(ω₀=OMEGA_TARGET, t_r=SEPARATION_TIME, t_loop=LOOP_TIME) / π ###
 
 surface_pop(Ψ) = norm(Ψ)^2
 
@@ -497,7 +498,7 @@ end
 
 eval_scheme(ω₀=OMEGA_TARGET, θ=theta_grid, t_r=SEPARATION_TIME, t_loop=LOOP_TIME, Ω=0.0)
 
-angular_displacement(ω₀=OMEGA_TARGET,t_r=SEPARATION_TIME, t_loop=LOOP_TIME) / π
+angular_displacement(ω₀=OMEGA_TARGET, t_r=SEPARATION_TIME, t_loop=LOOP_TIME) / π
 
 function scan_Ω(Ω_list)
     P_list = Float64[]
@@ -520,19 +521,24 @@ P_list = scan_Ω(Ω_list)
 plot(Ω_list / (1 / sec), P_list, xlabel="Ω (1/sec)", legend=false)
 
 function sagnac_phase(Ω, ; Φ, R=TAI_RADIUS, m=RUBIDIUM_MASS)
-    A = (R^2/2) * Φ
+    A = (R^2 / 2) * Φ
     return 4 * m * Ω * A
 end
 
 function sagnac_population(
-        Ω_list; R=TAI_RADIUS, m=RUBIDIUM_MASS, ω₀=OMEGA_TARGET, t_r=SEPARATION_TIME, t_loop=LOOP_TIME
-    )
+    Ω_list;
+    R=TAI_RADIUS,
+    m=RUBIDIUM_MASS,
+    ω₀=OMEGA_TARGET,
+    t_r=SEPARATION_TIME,
+    t_loop=LOOP_TIME
+)
     # α is a correction factor, should be 1.0
-    Φ = angular_displacement(;ω₀, t_r, t_loop)
+    Φ = angular_displacement(; ω₀, t_r, t_loop)
     ΔΦ = sagnac_phase.(Ω_list; Φ, R, m)
-    return sin.(ΔΦ / 2).^2
+    return sin.(ΔΦ / 2) .^ 2
 end
 
 plot(Ω_list / (1 / sec), P_list, xlabel="Ω (1/sec)", label="simulation", legend=:outertop)
 plot!(Ω_list / (1 / sec), sagnac_population(Ω_list), label="sagnac")
-plot!(;size=(600,450))
+plot!(; size=(600, 450))

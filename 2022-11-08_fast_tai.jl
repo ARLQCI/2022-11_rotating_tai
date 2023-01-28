@@ -7,9 +7,9 @@
 #       extension: .jl
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.13.0
+#       jupytext_version: 1.11.3
 #   kernelspec:
-#     display_name: Julia 1.8.2
+#     display_name: Julia 1.8.0
 #     language: julia
 #     name: julia-1.8
 # ---
@@ -45,18 +45,18 @@ const RUBIDIUM_MASS = 86.91Dalton;
 const TAI_RADIUS = 42μm
 const N_SITES = 8;
 const SEPARATION_TIME = 1ms;
-const OMEGA_TARGET = (1000π/sec);
+const OMEGA_TARGET = (1000π / sec);
 const EFFECTIVE_MASS = TAI_RADIUS^2 * RUBIDIUM_MASS;
 const POTENTIAL_DEPTH = 2.2MHz;
 
-includet("./integrated_amplitude.jl")
+includet("./include/integrated_amplitude.jl")
 
-includet("./rotating_tai.jl")
+includet("./include/rotating_tai.jl")
 
 
-includet("./split_propagator.jl")
+includet("./include/split_propagator.jl")
 
-tlist = collect(range(0, SEPARATION_TIME, length=(Int(SEPARATION_TIME÷ms)*1000+1)));
+tlist = collect(range(0, SEPARATION_TIME, length=(Int(SEPARATION_TIME ÷ ms) * 1000 + 1)));
 theta_grid = collect(range(0, 0.75π, length=6144));
 
 typeof(theta_grid)
@@ -65,15 +65,21 @@ typeof(theta_grid)
 
 length(tlist)
 
-println("Storage for full Hamiltonian matrix: $(sizeof(zeros(Float64, length(theta_grid), length(theta_grid))) / 1024^2) MB")
+println(
+    "Storage for full Hamiltonian matrix: $(sizeof(zeros(Float64, length(theta_grid), length(theta_grid))) / 1024^2) MB"
+)
 
 function rotating_tai_hamiltonian(;
-        tlist, theta, phi, direction=1, Omega=0.0,
-        V0=POTENTIAL_DEPTH, m=N_SITES, mass=EFFECTIVE_MASS
+    tlist,
+    theta,
+    phi,
+    direction=1,
+    Omega=0.0,
+    V0=POTENTIAL_DEPTH,
+    m=N_SITES,
+    mass=EFFECTIVE_MASS
 )
-    V = RotTAI_PotentialGenerator(
-        ; V0, m, theta, phi, direction, Omega
-    )
+    V = RotTAI_PotentialGenerator(; V0, m, theta, phi, direction, Omega)
     dθ = theta[2] - theta[1]
     n_theta = length(theta)
     pgrid = 2π * fftfreq(n_theta, 1 / dθ)
@@ -84,14 +90,10 @@ function rotating_tai_hamiltonian(;
     SplitGenerator(K, V, Ψ -> fft_op * Ψ, Ψ -> ifft_op * Ψ)
 end
 
-omega(t; w0=OMEGA_TARGET, t_r=SEPARATION_TIME) = w0 * sin(π*t/(2t_r))^2;
+omega(t; w0=OMEGA_TARGET, t_r=SEPARATION_TIME) = w0 * sin(π * t / (2t_r))^2;
 
-phi(; w0=OMEGA_TARGET, t_r=SEPARATION_TIME) = IntegratedAmplitude(
-    discretize_on_midpoints(
-        t->omega(t; w0, t_r),
-        tlist
-    )
-);
+phi(; w0=OMEGA_TARGET, t_r=SEPARATION_TIME) =
+    IntegratedAmplitude(discretize_on_midpoints(t -> omega(t; w0, t_r), tlist));
 
 function discretize_on_midpoints(ampl::IntegratedAmplitude, tlist)
     N = length(tlist) - 1
@@ -105,22 +107,23 @@ end
 
 plot(
     tlist ./ sec,
-    discretize(omega.(tlist), tlist) / (2π/sec);
-    legend=:topleft, label="ω(t)", xlabel="time (sec)",
+    discretize(omega.(tlist), tlist) / (2π / sec);
+    legend=:topleft,
+    label="ω(t)",
+    xlabel="time (sec)",
     ylabel="angular velocity (2π/sec)"
 )
 
 plot(
     tlist ./ ms,
     discretize(phi(), tlist) ./ π;
-    legend=:topleft, label="ϕ(t)", xlabel="time (ms)", ylabel="phase / π"
+    legend=:topleft,
+    label="ϕ(t)",
+    xlabel="time (ms)",
+    ylabel="phase / π"
 )
 
-Ĥ = rotating_tai_hamiltonian(
-    tlist=tlist,
-    theta=theta_grid,
-    phi=phi()
-);
+Ĥ = rotating_tai_hamiltonian(tlist=tlist, theta=theta_grid, phi=phi());
 
 typeof(Ĥ)
 
@@ -139,17 +142,28 @@ typeof(Ĥ₀.V)
 
 # ## Calculate initial state
 
-Ψ₀ = get_ground_state(Ĥ₀, theta_grid, π/8,  d=0.05, steps=10_000);
+Ψ₀ = get_ground_state(Ĥ₀, theta_grid, π / 8, d=0.05, steps=10_000);
 
-plot(theta_grid./π, V̂₀.diag./MHz, xlabel="θ/π", ylabel="Energy (MHz)", label="V")
-_offset = minimum(V̂₀.diag./MHz)
-plot!(theta_grid./π, 50 .* abs2.(Ψ₀).+_offset, label="|Ψ₀|²", xlim=(0,0.3), legend=:right)
+plot(theta_grid ./ π, V̂₀.diag ./ MHz, xlabel="θ/π", ylabel="Energy (MHz)", label="V")
+_offset = minimum(V̂₀.diag ./ MHz)
+plot!(
+    theta_grid ./ π,
+    50 .* abs2.(Ψ₀) .+ _offset,
+    label="|Ψ₀|²",
+    xlim=(0, 0.3),
+    legend=:right
+)
 
 println("⟨θ⟩_Ψ₀ = $(round(abs(dot(Ψ₀, Diagonal(theta_grid), Ψ₀) / π), digits=10))π")
 
 # ## Diagonalization
 
-function cut_grid(Ψ::Vector{ComplexF64}, theta_grid::Vector{Float64}; θmin::Float64, θmax::Float64)
+function cut_grid(
+    Ψ::Vector{ComplexF64},
+    theta_grid::Vector{Float64};
+    θmin::Float64,
+    θmax::Float64
+)
     filter = (theta_grid .≥ θmin) .& (theta_grid .≤ θmax)
     return Ψ[filter], theta_grid[filter]
 end
@@ -157,13 +171,7 @@ end
 _, theta_cut = cut_grid(Ψ₀, theta_grid; θmin=0.1π, θmax=0.15π);
 
 Ĥ_cut = evaluate(
-    rotating_tai_hamiltonian(
-        tlist=tlist,
-        theta=theta_cut,
-        V0=2.2MHz,
-        m=N_SITES,
-        phi=phi()
-    ),
+    rotating_tai_hamiltonian(tlist=tlist, theta=theta_cut, V0=2.2MHz, m=N_SITES, phi=phi()),
     tlist,
     1
 );
@@ -175,7 +183,7 @@ function kinetic_matrix(theta_grid::Vector{Float64}, mass::Float64)
     @inbounds for i = 1:nx
         for j = 1:nx
             if i ≠ j
-                D[j, i] = ((-1)^(j - i)) / sin(π * (j-i) / nx)
+                D[j, i] = ((-1)^(j - i)) / sin(π * (j - i) / nx)
             end
         end
     end
@@ -194,11 +202,11 @@ end
 eigensys = diagonalize_operator(Ĥ_cut, theta_cut);
 
 function plot_eigensys(H, eigensys; n_max=10, scale=2, kwargs...)
-    fig = plot(theta_cut./π, H.V.diag./MHz)
+    fig = plot(theta_cut ./ π, H.V.diag ./ MHz)
     for (n, λₙ) ∈ enumerate(eigensys.values)
         (n ≤ n_max) || break
         ϕₙ = eigensys.vectors[:, n]
-        plot!(fig, theta_cut./π, scale .* abs2.(ϕₙ) .+ (λₙ/MHz))
+        plot!(fig, theta_cut ./ π, scale .* abs2.(ϕₙ) .+ (λₙ / MHz))
     end
     plot!(fig; xlabel="θ/π", ylabel="Energy (MHz)", legend=false, kwargs...)
     return fig
@@ -206,88 +214,93 @@ end
 
 plot_eigensys(Ĥ_cut, eigensys; xlim=(0.115, 0.135), ylim=(-2.2, -2.1))
 
-plot(eigensys.values./MHz, ylabel="Energy (MHz)", xlabel="eigenvalue index", legend=false)
+plot(eigensys.values ./ MHz, ylabel="Energy (MHz)", xlabel="eigenvalue index", legend=false)
 
 # ## Target state
 
-Ĥ_tgt = evaluate(Ĥ, tlist, length(tlist)-1);
+Ĥ_tgt = evaluate(Ĥ, tlist, length(tlist) - 1);
 
 V̂_tgt = Ĥ_tgt.V;
 
 Boost = Diagonal(exp.(1im .* EFFECTIVE_MASS .* OMEGA_TARGET .* theta_grid));
 
-Ψ_tgt = Boost * get_ground_state(Ĥ_tgt, theta_grid, 0.6π,  d=0.05, steps=10_000);
+Ψ_tgt = Boost * get_ground_state(Ĥ_tgt, theta_grid, 0.6π, d=0.05, steps=10_000);
 
-plot(theta_grid./π, V̂_tgt.diag./MHz, xlabel="θ/π", ylabel="Energy (MHz)", label="V")
-_offset = minimum(V̂_tgt.diag./MHz)
-plot!(theta_grid./π, 50 .* abs2.(Ψ_tgt).+_offset, label="|Ψ_tgt|²")
+plot(theta_grid ./ π, V̂_tgt.diag ./ MHz, xlabel="θ/π", ylabel="Energy (MHz)", label="V")
+_offset = minimum(V̂_tgt.diag ./ MHz)
+plot!(theta_grid ./ π, 50 .* abs2.(Ψ_tgt) .+ _offset, label="|Ψ_tgt|²")
 
 # ## Propagation (Split Propagator)
 
-split_states = propagate(Ψ₀, Ĥ, tlist; method=:cheby, specrange_method=:arnoldi, storage=true, showprogress=true);
+split_states = propagate(
+    Ψ₀,
+    Ĥ,
+    tlist;
+    method=:cheby,
+    specrange_method=:arnoldi,
+    storage=true,
+    showprogress=true
+);
 
 function plot_system(generator, states, theta_grid, tlist, n; psi_scale=50)
     t = tlist[n]
     Ĥ = generator
-    V = evaluate(Ĥ, tlist, min(n, length(tlist)-1)).V.diag
-    offset = minimum(V/MHz)
-    Ψ = states[:,n]
-    fig = plot(theta_grid./π, V/MHz, xlabel="θ/π", ylabel="Energy (MHz)", label="V")
-    plot!(fig, theta_grid./π, psi_scale*abs2.(Ψ).+offset, label="|Ψ|²")
+    V = evaluate(Ĥ, tlist, min(n, length(tlist) - 1)).V.diag
+    offset = minimum(V / MHz)
+    Ψ = states[:, n]
+    fig = plot(theta_grid ./ π, V / MHz, xlabel="θ/π", ylabel="Energy (MHz)", label="V")
+    plot!(fig, theta_grid ./ π, psi_scale * abs2.(Ψ) .+ offset, label="|Ψ|²")
     plot!(title="t=$(t/ms)ms")
 end
 
-anim = @animate for n=1:(length(tlist) ÷ 100):length(tlist)
+anim = @animate for n = 1:(length(tlist)÷100):length(tlist)
     plot_system(Ĥ, split_states, theta_grid, tlist, n)
 end
 gif(anim, "anim.gif", fps=10)
 
-abs2(split_states[:,end] ⋅ Ψ_tgt)
+abs2(split_states[:, end] ⋅ Ψ_tgt)
 
-angle(split_states[:,end] ⋅ Ψ_tgt) / π
+angle(split_states[:, end] ⋅ Ψ_tgt) / π
 
-plot(theta_grid./π, V̂_tgt.diag./MHz, label="V")
-_offset = minimum(V̂_tgt.diag./MHz)
-plot!(theta_grid./π, 50 .* abs2.(split_states[:,end]).+_offset, label="|Ψ(T)|²")
-plot!(theta_grid./π, 50 .* abs2.(Ψ_tgt).+_offset, label="|Ψ_tgt|²")
+plot(theta_grid ./ π, V̂_tgt.diag ./ MHz, label="V")
+_offset = minimum(V̂_tgt.diag ./ MHz)
+plot!(theta_grid ./ π, 50 .* abs2.(split_states[:, end]) .+ _offset, label="|Ψ(T)|²")
+plot!(theta_grid ./ π, 50 .* abs2.(Ψ_tgt) .+ _offset, label="|Ψ_tgt|²")
 plot!(; xlabel="θ/π", ylabel="Energy (MHz)", xlim=(0.62, 0.63))
 
 # ## Free time evolution
 
-Ψ_free = Boost' * split_states[:,end];
+Ψ_free = Boost' * split_states[:, end];
 
-Ĥ_free = evaluate(Ĥ, tlist, length(tlist)-1);
+Ĥ_free = evaluate(Ĥ, tlist, length(tlist) - 1);
 
 V̂_free = Ĥ_free.V;
 
-plot(theta_grid./π, V̂_free.diag./MHz, xlabel="θ/π", ylabel="Energy (MHz)", label="V")
-_offset = minimum(V̂_free.diag./MHz)
-plot!(theta_grid./π, 50 .* abs2.(Ψ_free).+_offset, label="|Ψ|²")
+plot(theta_grid ./ π, V̂_free.diag ./ MHz, xlabel="θ/π", ylabel="Energy (MHz)", label="V")
+_offset = minimum(V̂_free.diag ./ MHz)
+plot!(theta_grid ./ π, 50 .* abs2.(Ψ_free) .+ _offset, label="|Ψ|²")
 
-θ₀ = evaluate(Ĥ.V.phi, tlist, length(tlist)-1)
+θ₀ = evaluate(Ĥ.V.phi, tlist, length(tlist) - 1)
 
 Ψ_free_cut, theta_free = cut_grid(Ψ_free, theta_grid; θmin=(θ₀ + 0.1π), θmax=(θ₀ + 0.15π));
 
 Ĥ_free = evaluate(
-    rotating_tai_hamiltonian(
-        tlist=[0, 1.0],
-        theta=theta_free,
-        phi=[0.0,]
-    ),
-    [0, 1.0], 1
+    rotating_tai_hamiltonian(tlist=[0, 1.0], theta=theta_free, phi=[0.0,]),
+    [0, 1.0],
+    1
 );
 
-plot(theta_free./π, Ĥ_free.V.diag./MHz, xlabel="θ/π", ylabel="Energy (MHz)", label="V")
-_offset = minimum(V̂_free.diag./MHz)
-plot!(theta_free./π, 50 .* abs2.(Ψ_free_cut).+_offset, label="|Ψ|²")
+plot(theta_free ./ π, Ĥ_free.V.diag ./ MHz, xlabel="θ/π", ylabel="Energy (MHz)", label="V")
+_offset = minimum(V̂_free.diag ./ MHz)
+plot!(theta_free ./ π, 50 .* abs2.(Ψ_free_cut) .+ _offset, label="|Ψ|²")
 
 # ## Full scheme propagation
 
 function eval_scheme(t_split, t_free, Ω)
-    Ψ0 = prop_squeme(;dir=1, Ω=Ω)
-    Ψ1 = prop_squeme(;dir=-1, Ω=Ω)
+    Ψ0 = prop_squeme(; dir=1, Ω=Ω)
+    Ψ1 = prop_squeme(; dir=-1, Ω=Ω)
     Ψup = (Ψ0 + Ψ1)
-    abs2(Ψup ⋅ Ψup)/16
+    abs2(Ψup ⋅ Ψup) / 16
 end
 
 # ## Optimization
@@ -298,10 +311,11 @@ objective = Objective(initial_state=Ψ₀, target_state=Ψ_tgt, generator=Ĥ)
 
 ω = get_controls(objective.generator)[1];
 
-problem = ControlProblem(;objectives=[objective], tlist, pulse_options=IdDict(ω => Dict(:lambda_a => 1.0, :update_shape=>(t -> 1.0))));
+problem = ControlProblem(;
+    objectives=[objective],
+    tlist,
+    pulse_options=IdDict(ω => Dict(:lambda_a => 1.0, :update_shape => (t -> 1.0)))
+);
 
 # +
 #optimize(problem; prop_method=:cheby, method=:krotov, specrange_method=:arnoldi, J_T=QuantumControl.Functionals.J_T_sm)
-# -
-
-

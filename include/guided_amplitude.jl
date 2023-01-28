@@ -13,7 +13,9 @@ ampl = GuidedAmplitude(control, tlist; shape=shape, guide=guide)
 abstract type GuidedAmplitude <: ControlAmplitude end
 
 function GuidedAmplitude(control; shape, guide)
-    if (control isa Vector{Float64}) && (shape isa Vector{Float64}) && (guide isa Vector{Float64})
+    if (control isa Vector{Float64}) &&
+       (shape isa Vector{Float64}) &&
+       (guide isa Vector{Float64})
         return GuidedPulseAmplitude(control, shape, guide)
     else
         try
@@ -47,7 +49,10 @@ end
 
 
 function Base.show(io::IO, ampl::GuidedAmplitude)
-    print(io, "GuidedAmplitude(::$(typeof(ampl.control)); guide::$(typeof(ampl.guide)), shape::$(typeof(ampl.shape)))")
+    print(
+        io,
+        "GuidedAmplitude(::$(typeof(ampl.control)); guide::$(typeof(ampl.guide)), shape::$(typeof(ampl.shape)))"
+    )
 end
 
 
@@ -69,14 +74,15 @@ struct GuidedContinuousAmplitude <: GuidedAmplitude
     guide
 end
 
-(ampl::GuidedContinuousAmplitude)(t::Float64) = ampl.guide(t) + ampl.shape(t) * ampl.control(t)
+(ampl::GuidedContinuousAmplitude)(t::Float64) =
+    ampl.guide(t) + ampl.shape(t) * ampl.control(t)
 
 
 function evaluate(ampl::GuidedPulseAmplitude, args...; kwargs...)
-    S = evaluate(ampl.shape, args...; kwargs...) 
+    S = evaluate(ampl.shape, args...; kwargs...)
     δϵ = evaluate(ampl.control, args...; kwargs...)
     G = evaluate(ampl.guide, args...; kwargs...)
-    return S *  δϵ +  G
+    return S * δϵ + G
 end
 
 
@@ -86,4 +92,3 @@ end
 
 get_control_deriv(ampl::GuidedAmplitude, control) =
     (control ≡ ampl.control) ? LockedAmplitude(ampl.shape) : 0.0
-

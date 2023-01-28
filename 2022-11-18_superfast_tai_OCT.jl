@@ -63,10 +63,10 @@ const OMEGA_TARGET = 1000π / sec;
 const EFFECTIVE_MASS = TAI_RADIUS^2 * RUBIDIUM_MASS;
 const POTENTIAL_DEPTH = 2.2MHz;
 
-includet("./rotating_tai.jl")
+includet("./include/rotating_tai.jl")
 
 
-includet("./split_propagator.jl")
+includet("./include/split_propagator.jl")
 
 tlist = collect(range(0, SEPARATION_TIME, length=(Int(SEPARATION_TIME ÷ ms) * 1000 + 1)));
 theta_grid = collect(range(0, 0.25π, length=4096));
@@ -88,18 +88,18 @@ function rotating_tai_hamiltonian(;
 
     V = Diagonal(V₀ .* cos.(m .* θ))
 
-    dθ = θ[2] - θ[1]
-    nθ = length(θ)
-    pgrid::Vector{Float64} = 2π * fftfreq(nθ, 1 / dθ)
-    P::Diagonal{Float64, Vector{Float64}} = Diagonal(pgrid)
-    K::Diagonal{Float64, Vector{Float64}} = Diagonal(pgrid .^ 2 / (2 * mass))
+    dθ                                   = θ[2] - θ[1]
+    nθ                                   = length(θ)
+    pgrid::Vector{Float64}               = 2π * fftfreq(nθ, 1 / dθ)
+    P::Diagonal{Float64,Vector{Float64}} = Diagonal(pgrid)
+    K::Diagonal{Float64,Vector{Float64}} = Diagonal(pgrid .^ 2 / (2 * mass))
 
     _Ψ = Array{ComplexF64}(undef, nθ)
     fft_op = plan_fft!(_Ψ)
     ifft_op = plan_ifft!(_Ψ)
     transforms = (Ψ -> fft_op * Ψ, Ψ -> ifft_op * Ψ)
 
-    K′::Diagonal{Float64, Vector{Float64}} = K - Ω * P
+    K′::Diagonal{Float64,Vector{Float64}} = K - Ω * P
 
     if ω isa Number
         if direction == 1
@@ -244,7 +244,7 @@ norm(abs2.(Ψ_tgt) - abs2.(Ψ₀))
 
 plot(theta_grid ./ π, real.(Ψ_tgt), marker=true, xlim=(0.115, 0.135))
 
-plot(theta_grid ./ π, real.(Ψ₀) - real.(Ψ_tgt), marker=true,  xlim=(0.115, 0.135))
+plot(theta_grid ./ π, real.(Ψ₀) - real.(Ψ_tgt), marker=true, xlim=(0.115, 0.135))
 
 # ## Propagation (Split Propagator)
 
@@ -258,7 +258,16 @@ split_states = propagate(
     showprogress=true
 );
 
-function plot_system(generator, states, theta_grid, tlist, n; psi_target=nothing, psi_scale=50, kwargs...)
+function plot_system(
+    generator,
+    states,
+    theta_grid,
+    tlist,
+    n;
+    psi_target=nothing,
+    psi_scale=50,
+    kwargs...
+)
     t = tlist[n]
     Ĥ = generator
     V = evaluate(Ĥ, tlist, min(n, length(tlist) - 1)).V.diag
@@ -269,11 +278,11 @@ function plot_system(generator, states, theta_grid, tlist, n; psi_target=nothing
     if !isnothing(psi_target)
         plot!(fig, theta_grid ./ π, psi_scale * abs2.(psi_target) .+ offset, label="tgt")
     end
-    plot!(;title="t=$(t/ms)ms", kwargs...)
+    plot!(; title="t=$(t/ms)ms", kwargs...)
 end
 
 plot(theta_grid ./ π, abs2.(Ψ_tgt), label="tgt")
-plot!(theta_grid ./ π, abs2.(split_states[:,end]), label="Ψ")
+plot!(theta_grid ./ π, abs2.(split_states[:, end]), label="Ψ")
 plot!(; xlim=(0.12, 0.13))
 
 anim = @animate for n = 1:(length(tlist)÷100):length(tlist)
@@ -295,11 +304,11 @@ cheby_states = propagate(
     specrange_method=:arnoldi,
     storage=true,
     showprogress=true,
-    check_normalization=true,
+    check_normalization=true
 );
 
 plot(theta_grid ./ π, abs2.(Ψ_tgt), label="tgt")
-plot!(theta_grid ./ π, abs2.(cheby_states[:,end]), label="Ψ")
+plot!(theta_grid ./ π, abs2.(cheby_states[:, end]), label="Ψ")
 plot!(; xlim=(0.12, 0.13))
 
 abs2(cheby_states[:, end] ⋅ Ψ_tgt)
@@ -316,7 +325,7 @@ cheby_propagator = init_prop(
     specrange_method=:arnoldi,
     storage=true,
     showprogress=true,
-    check_normalization=true,
+    check_normalization=true
 );
 
 cheby_propagator.wrk.E_min
@@ -331,20 +340,19 @@ using GRAPE: optimize_grape
 
 using QuantumControl.Functionals: J_T_sm
 
-include("guided_amplitude.jl")
+include("./include/guided_amplitude.jl")
 
 # +
-S(t) = QuantumControl.Shapes.flattop(
-    t, T=tlist[end], t_rise=0.2*tlist[end], func=:blackman
-)
+S(t) =
+    QuantumControl.Shapes.flattop(t, T=tlist[end], t_rise=0.2 * tlist[end], func=:blackman)
 
 objective = Objective(
-    initial_state = Ψ₀,
-    target_state = Ψ_tgt,
+    initial_state=Ψ₀,
+    target_state=Ψ_tgt,
     generator=rotating_tai_hamiltonian(
         tlist=tlist,
         θ=theta_grid,
-        ω=GuidedAmplitude(t->0.0, tlist; guide=omega_ramp_up, shape=S)
+        ω=GuidedAmplitude(t -> 0.0, tlist; guide=omega_ramp_up, shape=S)
     )
 )
 # -
@@ -362,9 +370,7 @@ problem = ControlProblem(;
     J_T=J_T_sm,
     prop_method=:splitprop,
     verbose=true,
-    pulse_options=IdDict(
-        δω => Dict(:lambda_a => 1e8, :update_shape => t->1.0)
-    ),
+    pulse_options=IdDict(δω => Dict(:lambda_a => 1e8, :update_shape => t -> 1.0)),
     specrange_method=:manual,
     check_normalization=false,
     check_convergence=res -> begin
@@ -373,37 +379,30 @@ problem = ControlProblem(;
 )
 # -
 
-opt = @optimize_or_load(
-    "opt__t_r=10ms__w0=1000πpsec.jld2",
-    problem;
-    method=:krotov
-)
+opt = @optimize_or_load("./data/opt__t_r=10ms__w0=1000πpsec.jld2", problem; method=:krotov)
 
 plot(opt.optimized_controls[1])
 
 ω_opt = discretize(
-    Array(
-        GuidedAmplitude(
-            opt.optimized_controls[1], tlist; guide=omega_ramp_up, shape=S
-        )
-    ),
+    Array(GuidedAmplitude(opt.optimized_controls[1], tlist; guide=omega_ramp_up, shape=S)),
     tlist
 )
 
 plot(tlist ./ sec, ω_opt / (2π / sec); label="optimized")
-plot!(tlist ./ sec, discretize(omega_ramp_up.(tlist), tlist) / (2π / sec); style=:dash, label="guess")
-plot!(;legend=:topleft, xlabel="time (sec)", ylabel="angular velocity (2π/sec)")
+plot!(
+    tlist ./ sec,
+    discretize(omega_ramp_up.(tlist), tlist) / (2π / sec);
+    style=:dash,
+    label="guess"
+)
+plot!(; legend=:topleft, xlabel="time (sec)", ylabel="angular velocity (2π/sec)")
 
 ω_guess = discretize(omega_ramp_up.(tlist), tlist)
 plot(tlist ./ sec, (ω_opt - ω_guess) / (2π / sec); label="δω")
 
 # ## Propagate Optimized Pulses
 
-Ĥ_opt = rotating_tai_hamiltonian(
-    tlist=tlist,
-    θ=theta_grid,
-    ω=ω_opt,
-);
+Ĥ_opt = rotating_tai_hamiltonian(tlist=tlist, θ=theta_grid, ω=ω_opt,);
 
 Ψ_opt = propagate(
     Ψ₀,
@@ -413,7 +412,7 @@ Ĥ_opt = rotating_tai_hamiltonian(
     specrange_method=:arnoldi,
     #storage=false,
     showprogress=true,
-    check_normalization=true,
+    check_normalization=true
 );
 
 plot(theta_grid ./ π, abs2.(Ψ_tgt), label="tgt")
@@ -447,18 +446,13 @@ function prop_opt_scheme(;
     V0=POTENTIAL_DEPTH,
     m=N_SITES,
     mass=EFFECTIVE_MASS,
-    ω_opt,
+    ω_opt
 )
 
     specrange_method = :arnoldi
     tlist_ramp_up = collect(range(0, t_r, length=(Int(t_r ÷ ms) * 1000 + 1)))
-    Ĥ_ramp_up = rotating_tai_hamiltonian(;
-        tlist=tlist_ramp_up,
-        θ,
-        Ω,
-        ω=ω_opt,
-        direction=dir
-    )
+    Ĥ_ramp_up =
+        rotating_tai_hamiltonian(; tlist=tlist_ramp_up, θ, Ω, ω=ω_opt, direction=dir)
     #t_loop = ...
 
     Ĥ_loop = rotating_tai_hamiltonian_coord(;
@@ -495,8 +489,7 @@ function angular_displacement(; ω₀, t_r, t_loop)
     dt_up = tlist_ramp_up[2] - tlist_ramp_up[1]
     ω_up = discretize_on_midpoints(t -> omega_ramp_up(t; w0=ω₀, t_r=t_r), tlist_ramp_up)
 
-    tlist_ramp_down =
-        collect(range(t_r + t_loop, 2 * t_r + t_loop, length=nt))
+    tlist_ramp_down = collect(range(t_r + t_loop, 2 * t_r + t_loop, length=nt))
     dt_down = tlist_ramp_down[2] - tlist_ramp_down[1]
     ω_down = discretize_on_midpoints(
         t -> omega_ramp_down(t - t_r - t_loop; w0=ω₀, t_r=t_r),
@@ -517,7 +510,7 @@ function angular_displacement(; ω₀, t_r, t_loop)
     return Φ
 end
 
-angular_displacement(ω₀=OMEGA_TARGET,t_r=SEPARATION_TIME, t_loop=LOOP_TIME) / π ###
+angular_displacement(ω₀=OMEGA_TARGET, t_r=SEPARATION_TIME, t_loop=LOOP_TIME) / π ###
 
 surface_pop(Ψ) = norm(Ψ)^2
 
@@ -533,8 +526,10 @@ function eval_scheme(; ω₀, θ, t_r, t_loop, Ω, ω_opt)
 
     Ψright, Ψleft = U_πhalf * [Ψright, Ψleft]
 
-    prop_right = Threads.@spawn prop_opt_scheme(; Ψ₀=Ψright, ω₀, θ, t_r, t_loop, dir=1, Ω=Ω, ω_opt)
-    prop_left = Threads.@spawn prop_opt_scheme(; Ψ₀=Ψleft, ω₀, θ, t_r, t_loop, dir=-1, Ω=Ω, ω_opt)
+    prop_right =
+        Threads.@spawn prop_opt_scheme(; Ψ₀=Ψright, ω₀, θ, t_r, t_loop, dir=1, Ω=Ω, ω_opt)
+    prop_left =
+        Threads.@spawn prop_opt_scheme(; Ψ₀=Ψleft, ω₀, θ, t_r, t_loop, dir=-1, Ω=Ω, ω_opt)
     Ψright = fetch(prop_right)
     Ψleft = fetch(prop_left)
 
@@ -542,11 +537,25 @@ function eval_scheme(; ω₀, θ, t_r, t_loop, Ω, ω_opt)
     return surface_pop(Ψright)
 end
 
-eval_scheme(ω₀=OMEGA_TARGET, θ=theta_grid, t_r=SEPARATION_TIME, t_loop=LOOP_TIME, Ω=0.0, ω_opt=ω_opt)
+eval_scheme(
+    ω₀=OMEGA_TARGET,
+    θ=theta_grid,
+    t_r=SEPARATION_TIME,
+    t_loop=LOOP_TIME,
+    Ω=0.0,
+    ω_opt=ω_opt
+)
 
-eval_scheme(ω₀=OMEGA_TARGET, θ=theta_grid, t_r=SEPARATION_TIME, t_loop=LOOP_TIME, Ω=0.005/sec, ω_opt=ω_opt)
+eval_scheme(
+    ω₀=OMEGA_TARGET,
+    θ=theta_grid,
+    t_r=SEPARATION_TIME,
+    t_loop=LOOP_TIME,
+    Ω=0.005 / sec,
+    ω_opt=ω_opt
+)
 
-angular_displacement(ω₀=OMEGA_TARGET,t_r=SEPARATION_TIME, t_loop=LOOP_TIME) / π
+angular_displacement(ω₀=OMEGA_TARGET, t_r=SEPARATION_TIME, t_loop=LOOP_TIME) / π
 
 function scan_Ω(Ω_list)
     P_list = Float64[]
@@ -564,26 +573,35 @@ function scan_Ω(Ω_list)
     return P_list
 end
 
+include("include/workflow.jl")
+
 Ω_list = collect(range(0, 0.001 / sec, length=41))
-P_list = scan_Ω(Ω_list)
+P_list = run_or_load("./data/2022-11-18_superfast_tai_OCT_P_list.npz") do
+    scan_Ω(Ω_list)
+end
 
 plot(Ω_list / (1 / sec), P_list, xlabel="Ω (1/sec)", legend=false)
 
 plot(Ω_list / (1 / sec), P_list, xlabel="Ω (1/sec)", legend=false, ylim=(0, 1))
 
 function sagnac_phase(Ω, ; Φ, R=TAI_RADIUS, m=RUBIDIUM_MASS)
-    A = (R^2/2) * Φ
+    A = (R^2 / 2) * Φ
     return 4 * m * Ω * A
 end
 
 function sagnac_population(
-        Ω_list; R=TAI_RADIUS, m=RUBIDIUM_MASS, ω₀=OMEGA_TARGET, t_r=SEPARATION_TIME, t_loop=LOOP_TIME
-    )
-    Φ = angular_displacement(;ω₀, t_r, t_loop)
+    Ω_list;
+    R=TAI_RADIUS,
+    m=RUBIDIUM_MASS,
+    ω₀=OMEGA_TARGET,
+    t_r=SEPARATION_TIME,
+    t_loop=LOOP_TIME
+)
+    Φ = angular_displacement(; ω₀, t_r, t_loop)
     ΔΦ = sagnac_phase.(Ω_list; Φ, R, m)
-    return sin.(ΔΦ / 2).^2
+    return sin.(ΔΦ / 2) .^ 2
 end
 
 plot(Ω_list / (1 / sec), P_list, xlabel="Ω (1/sec)", label="simulation", legend=:outertop)
 plot!(Ω_list / (1 / sec), sagnac_population(Ω_list), label="sagnac")
-plot!(;size=(600,450))
+plot!(; size=(600, 450))

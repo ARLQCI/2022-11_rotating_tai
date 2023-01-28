@@ -1,5 +1,4 @@
-import QuantumPropagators.Controls:
-    get_controls, evaluate, substitute
+import QuantumPropagators.Controls: get_controls, evaluate, substitute
 import QuantumControlBase: get_control_deriv
 
 
@@ -9,8 +8,8 @@ mutable struct IntegratedAmplitudeEvalCache
 end
 
 struct IntegratedAmplitude
-    control :: Vector{Float64}
-    eval_cache :: IntegratedAmplitudeEvalCache
+    control::Vector{Float64}
+    eval_cache::IntegratedAmplitudeEvalCache
     function IntegratedAmplitude(control)
         new(control, IntegratedAmplitudeEvalCache(0, 0.0))
     end
@@ -24,12 +23,12 @@ function evaluate(ampl::IntegratedAmplitude, tlist, n; vals_dict=IdDict())
     end
     val = 0.0
     #if ampl.eval_cache.n == n-1
-        #val = ampl.eval_cache.val
+    #val = ampl.eval_cache.val
     #else
-        for i ∈ 1:n-1
-            dt = tlist[i+1] - tlist[i]
-            val += control[i] * dt
-        end
+    for i ∈ 1:n-1
+        dt = tlist[i+1] - tlist[i]
+        val += control[i] * dt
+    end
     #end
     dt = tlist[n+1] - tlist[n]
     val += get(vals_dict, control, control[n]) * dt
@@ -46,7 +45,7 @@ end
 
 
 function get_controls(ampl::IntegratedAmplitude)
-    return (ampl.control, )
+    return (ampl.control,)
 end
 
 

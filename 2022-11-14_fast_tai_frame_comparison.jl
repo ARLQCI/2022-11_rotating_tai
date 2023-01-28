@@ -9,7 +9,7 @@
 #       format_version: '1.5'
 #       jupytext_version: 1.11.3
 #   kernelspec:
-#     display_name: Julia 1.8 (4 threads)
+#     display_name: Julia 1.8 (auto threads)
 #     language: julia
 #     name: julia-1.8-multithread
 # ---
@@ -50,12 +50,12 @@ const OMEGA_TARGET = 1000π / sec;
 const EFFECTIVE_MASS = TAI_RADIUS^2 * RUBIDIUM_MASS;
 const POTENTIAL_DEPTH = 2.2MHz;
 
-includet("./integrated_amplitude.jl")
+includet("./include/integrated_amplitude.jl")
 
-includet("./rotating_tai.jl")
+includet("./include/rotating_tai.jl")
 
 
-includet("./split_propagator.jl")
+includet("./include/split_propagator.jl")
 
 tlist = collect(range(0, SEPARATION_TIME, length=(Int(SEPARATION_TIME ÷ ms) * 1000 + 1)));
 
@@ -233,7 +233,13 @@ end
 
 Ψ₀_moving = get_ground_state_moving_frame(; θ=theta_grid_moving_frame, ω=0.0);
 
-plot(theta_grid_moving_frame ./ π, V̂₀_moving.diag ./ MHz, xlabel="θ/π", ylabel="Energy (MHz)", label="V")
+plot(
+    theta_grid_moving_frame ./ π,
+    V̂₀_moving.diag ./ MHz,
+    xlabel="θ/π",
+    ylabel="Energy (MHz)",
+    label="V"
+)
 _offset = minimum(V̂₀_moving.diag ./ MHz)
 plot!(
     theta_grid_moving_frame ./ π,
@@ -243,9 +249,15 @@ plot!(
     legend=:right
 )
 
-Ψ₀_lab = get_ground_state(Ĥ₀_lab, theta_grid_lab_frame, 2π/16,  d=0.05, steps=10_000);
+Ψ₀_lab = get_ground_state(Ĥ₀_lab, theta_grid_lab_frame, 2π / 16, d=0.05, steps=10_000);
 
-plot(theta_grid_lab_frame ./ π, V̂₀_lab.diag ./ MHz, xlabel="θ/π", ylabel="Energy (MHz)", label="V")
+plot(
+    theta_grid_lab_frame ./ π,
+    V̂₀_lab.diag ./ MHz,
+    xlabel="θ/π",
+    ylabel="Energy (MHz)",
+    label="V"
+)
 _offset = minimum(V̂₀_lab.diag ./ MHz)
 plot!(
     theta_grid_lab_frame ./ π,
@@ -261,9 +273,14 @@ plot!(
 
 Boost = Diagonal(exp.(1im .* EFFECTIVE_MASS .* OMEGA_TARGET .* theta_grid_lab_frame));
 
-Ψ_tgt_lab = Boost * get_ground_state(
-    evaluate(Ĥ_lab, tlist, length(tlist)-1),
-    theta_grid_lab_frame, 0.6π,  d=0.05, steps=10_000);
+Ψ_tgt_lab =
+    Boost * get_ground_state(
+        evaluate(Ĥ_lab, tlist, length(tlist) - 1),
+        theta_grid_lab_frame,
+        0.6π,
+        d=0.05,
+        steps=10_000
+    );
 
 # ## Propagation in lab frame
 
@@ -277,11 +294,17 @@ states_lab = propagate(
     showprogress=true
 );
 
-plot(theta_grid_lab_frame ./ π, V̂₀_lab.diag ./ MHz, xlabel="θ/π", ylabel="Energy (MHz)", label="V")
+plot(
+    theta_grid_lab_frame ./ π,
+    V̂₀_lab.diag ./ MHz,
+    xlabel="θ/π",
+    ylabel="Energy (MHz)",
+    label="V"
+)
 _offset = minimum(V̂₀_lab.diag ./ MHz)
 plot!(
     theta_grid_lab_frame ./ π,
-    50 .* abs2.(states_lab[:,end]) .+ _offset,
+    50 .* abs2.(states_lab[:, end]) .+ _offset,
     label="|Ψ|²",
     xlim=(0.62, 0.63),
     legend=:right
@@ -293,7 +316,7 @@ plot!(
     legend=:right
 )
 
-abs2(states_lab[:,end] ⋅ Ψ_tgt_lab)
+abs2(states_lab[:, end] ⋅ Ψ_tgt_lab)
 
 # ## Propagation in moving frame
 
@@ -307,11 +330,17 @@ states_moving = propagate(
     showprogress=true
 );
 
-plot(theta_grid_moving_frame ./ π, V̂₀_moving.diag ./ MHz, xlabel="θ/π", ylabel="Energy (MHz)", label="V")
+plot(
+    theta_grid_moving_frame ./ π,
+    V̂₀_moving.diag ./ MHz,
+    xlabel="θ/π",
+    ylabel="Energy (MHz)",
+    label="V"
+)
 _offset = minimum(V̂₀_moving.diag ./ MHz)
 plot!(
     theta_grid_moving_frame ./ π,
-    50 .* abs2.(states_moving[:,end]) .+ _offset,
+    50 .* abs2.(states_moving[:, end]) .+ _offset,
     label="|Ψ|²",
     xlim=(0.12, 0.13),
 )
@@ -322,7 +351,7 @@ plot!(
     legend=:top
 )
 
-abs2(states_moving[:,end] ⋅ Ψ_tgt_moving)
+abs2(states_moving[:, end] ⋅ Ψ_tgt_moving)
 
 # ## Frame transformation
 
@@ -354,12 +383,18 @@ end
 # -
 
 Ψ_lab = moving_to_lab(
-    states_moving[:,end],
+    states_moving[:, end],
     get_controls(Ĥ_moving)[1],
     theta_grid_lab_frame,
     tlist
 )
-plot(theta_grid_lab_frame ./ π, V̂₀_lab.diag ./ MHz, xlabel="θ/π", ylabel="Energy (MHz)", label="V")
+plot(
+    theta_grid_lab_frame ./ π,
+    V̂₀_lab.diag ./ MHz,
+    xlabel="θ/π",
+    ylabel="Energy (MHz)",
+    label="V"
+)
 _offset = minimum(V̂₀_lab.diag ./ MHz)
 plot!(
     theta_grid_lab_frame ./ π,
@@ -369,22 +404,20 @@ plot!(
     legend=:top
 )
 
-plot(theta_grid_lab_frame ./ π, V̂₀_lab.diag ./ MHz, xlabel="θ/π", ylabel="Energy (MHz)", label="V")
+plot(
+    theta_grid_lab_frame ./ π,
+    V̂₀_lab.diag ./ MHz,
+    xlabel="θ/π",
+    ylabel="Energy (MHz)",
+    label="V"
+)
 _offset = minimum(V̂₀_lab.diag ./ MHz)
 plot!(
     theta_grid_lab_frame ./ π,
-    50 .* abs2.(states_lab[:,end]) .+ _offset,
+    50 .* abs2.(states_lab[:, end]) .+ _offset,
     label="|Ψ|²",
     xlim=(0.62, 0.63),
     legend=:top
 )
-plot!(
-    theta_grid_lab_frame ./ π,
-    50 .* abs2.(Ψ_lab) .+ _offset,
-    label="|Ψ(from moving)|²",
-)
-plot!(
-    theta_grid_lab_frame ./ π,
-    50 .* abs2.(Ψ_tgt_lab) .+ _offset,
-    label="tgt",
-)
+plot!(theta_grid_lab_frame ./ π, 50 .* abs2.(Ψ_lab) .+ _offset, label="|Ψ(from moving)|²",)
+plot!(theta_grid_lab_frame ./ π, 50 .* abs2.(Ψ_tgt_lab) .+ _offset, label="tgt",)

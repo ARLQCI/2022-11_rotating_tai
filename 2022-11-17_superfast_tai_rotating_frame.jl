@@ -62,10 +62,10 @@ const OMEGA_TARGET = 1000π / sec;
 const EFFECTIVE_MASS = TAI_RADIUS^2 * RUBIDIUM_MASS;
 const POTENTIAL_DEPTH = 2.2MHz;
 
-includet("./rotating_tai.jl")
+includet("./include/rotating_tai.jl")
 
 
-includet("./split_propagator.jl")
+includet("./include/split_propagator.jl")
 
 tlist = collect(range(0, SEPARATION_TIME, length=(Int(SEPARATION_TIME ÷ ms) * 1000 + 1)));
 theta_grid = collect(range(0, 0.25π, length=4096));
@@ -236,7 +236,7 @@ norm(abs2.(Ψ_tgt) - abs2.(Ψ₀))
 
 plot(theta_grid ./ π, real.(Ψ_tgt), marker=true, xlim=(0.115, 0.135))
 
-plot(theta_grid ./ π, real.(Ψ₀) - real.(Ψ_tgt), marker=true,  xlim=(0.115, 0.135))
+plot(theta_grid ./ π, real.(Ψ₀) - real.(Ψ_tgt), marker=true, xlim=(0.115, 0.135))
 
 # ## Propagation (Split Propagator)
 
@@ -250,7 +250,16 @@ split_states = propagate(
     showprogress=true
 );
 
-function plot_system(generator, states, theta_grid, tlist, n; psi_target=nothing, psi_scale=50, kwargs...)
+function plot_system(
+    generator,
+    states,
+    theta_grid,
+    tlist,
+    n;
+    psi_target=nothing,
+    psi_scale=50,
+    kwargs...
+)
     t = tlist[n]
     Ĥ = generator
     V = evaluate(Ĥ, tlist, min(n, length(tlist) - 1)).V.diag
@@ -261,15 +270,24 @@ function plot_system(generator, states, theta_grid, tlist, n; psi_target=nothing
     if !isnothing(psi_target)
         plot!(fig, theta_grid ./ π, psi_scale * abs2.(psi_target) .+ offset, label="tgt")
     end
-    plot!(;title="t=$(t/ms)ms", kwargs...)
+    plot!(; title="t=$(t/ms)ms", kwargs...)
 end
 
 plot(theta_grid ./ π, abs2.(Ψ_tgt), label="tgt")
-plot!(theta_grid ./ π, abs2.(split_states[:,end]), label="Ψ")
+plot!(theta_grid ./ π, abs2.(split_states[:, end]), label="Ψ")
 plot!(; xlim=(0.12, 0.13))
 
 anim = @animate for n = 1:(length(tlist)÷100):length(tlist)
-    plot_system(Ĥ, split_states, theta_grid, tlist, n; xlim=(0.12, 0.13), ylim=(-20.0, 20.0), psi_target=Ψ_tgt)
+    plot_system(
+        Ĥ,
+        split_states,
+        theta_grid,
+        tlist,
+        n;
+        xlim=(0.12, 0.13),
+        ylim=(-20.0, 20.0),
+        psi_target=Ψ_tgt
+    )
 end
 gif(anim, "anim.gif", fps=10)
 
@@ -368,8 +386,7 @@ function angular_displacement(; ω₀, t_r, t_loop)
     dt_up = tlist_ramp_up[2] - tlist_ramp_up[1]
     ω_up = discretize_on_midpoints(t -> omega_ramp_up(t; w0=ω₀, t_r=t_r), tlist_ramp_up)
 
-    tlist_ramp_down =
-        collect(range(t_r + t_loop, 2 * t_r + t_loop, length=nt))
+    tlist_ramp_down = collect(range(t_r + t_loop, 2 * t_r + t_loop, length=nt))
     dt_down = tlist_ramp_down[2] - tlist_ramp_down[1]
     ω_down = discretize_on_midpoints(
         t -> omega_ramp_down(t - t_r - t_loop; w0=ω₀, t_r=t_r),
@@ -390,7 +407,7 @@ function angular_displacement(; ω₀, t_r, t_loop)
     return Φ
 end
 
-angular_displacement(ω₀=OMEGA_TARGET,t_r=SEPARATION_TIME, t_loop=LOOP_TIME) / π ###
+angular_displacement(ω₀=OMEGA_TARGET, t_r=SEPARATION_TIME, t_loop=LOOP_TIME) / π ###
 
 surface_pop(Ψ) = norm(Ψ)^2
 
@@ -417,9 +434,15 @@ end
 
 eval_scheme(ω₀=OMEGA_TARGET, θ=theta_grid, t_r=SEPARATION_TIME, t_loop=LOOP_TIME, Ω=0.0)
 
-eval_scheme(ω₀=OMEGA_TARGET, θ=theta_grid, t_r=SEPARATION_TIME, t_loop=LOOP_TIME, Ω=0.005/sec)
+eval_scheme(
+    ω₀=OMEGA_TARGET,
+    θ=theta_grid,
+    t_r=SEPARATION_TIME,
+    t_loop=LOOP_TIME,
+    Ω=0.005 / sec
+)
 
-angular_displacement(ω₀=OMEGA_TARGET,t_r=SEPARATION_TIME, t_loop=LOOP_TIME) / π
+angular_displacement(ω₀=OMEGA_TARGET, t_r=SEPARATION_TIME, t_loop=LOOP_TIME) / π
 
 function scan_Ω(Ω_list)
     P_list = Float64[]
@@ -436,26 +459,35 @@ function scan_Ω(Ω_list)
     return P_list
 end
 
+include("include/workflow.jl")
+
 Ω_list = collect(range(0, 0.001 / sec, length=41))
-P_list = scan_Ω(Ω_list)
+P_list = run_or_load("./data/2022-11-17_superfast_tai_rotating_frame_P_list.npz") do
+    scan_Ω(Ω_list)
+end
 
 plot(Ω_list / (1 / sec), P_list, xlabel="Ω (1/sec)", legend=false)
 
 plot(Ω_list / (1 / sec), P_list, xlabel="Ω (1/sec)", legend=false, ylim=(0, 1))
 
 function sagnac_phase(Ω, ; Φ, R=TAI_RADIUS, m=RUBIDIUM_MASS)
-    A = (R^2/2) * Φ
+    A = (R^2 / 2) * Φ
     return 4 * m * Ω * A
 end
 
 function sagnac_population(
-        Ω_list; R=TAI_RADIUS, m=RUBIDIUM_MASS, ω₀=OMEGA_TARGET, t_r=SEPARATION_TIME, t_loop=LOOP_TIME
-    )
-    Φ = angular_displacement(;ω₀, t_r, t_loop)
+    Ω_list;
+    R=TAI_RADIUS,
+    m=RUBIDIUM_MASS,
+    ω₀=OMEGA_TARGET,
+    t_r=SEPARATION_TIME,
+    t_loop=LOOP_TIME
+)
+    Φ = angular_displacement(; ω₀, t_r, t_loop)
     ΔΦ = sagnac_phase.(Ω_list; Φ, R, m)
-    return sin.(ΔΦ / 2).^2
+    return sin.(ΔΦ / 2) .^ 2
 end
 
 plot(Ω_list / (1 / sec), P_list, xlabel="Ω (1/sec)", label="simulation", legend=:outertop)
 plot!(Ω_list / (1 / sec), sagnac_population(Ω_list), label="sagnac")
-plot!(;size=(600,450))
+plot!(; size=(600, 450))
