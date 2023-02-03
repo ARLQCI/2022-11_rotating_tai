@@ -126,6 +126,14 @@ function evaluate(gen::SplitGenerator, args...; kwargs...)
         end
     end
     V̂ = isnothing(gen.V) ? nothing : evaluate(gen.V, args...; kwargs...)
+    if V̂ isa Operator
+        # See above
+        if (length(V̂.ops) == 1) && (length(V̂.coeffs) == 1)
+            V̂ = V̂.coeffs[1] * V̂.ops[1]
+        else
+            error("Not implemented")
+        end
+    end
     SplitOperator(T̂, V̂, gen.to_p!, gen.to_x!)
 end
 
@@ -147,6 +155,7 @@ function evaluate!(
     else
         error("Not implemented")
     end
+    return op
 end
 
 
@@ -157,6 +166,7 @@ function evaluate!(op::SplitOperator, gen::SplitGenerator, args...; kwargs...)
     if !isnothing(op.V)
         evaluate!(op.V, gen.V, args...; kwargs...)
     end
+    return op
 end
 
 
@@ -373,6 +383,7 @@ function rotating_tai_hamiltonian(;
     tlist,
     theta_grid,
     ω,  # function of time
+    scale_potential=nothing,  # nothing, or function of time
     potential_depth,
     number_of_sites,
     mass,
@@ -385,6 +396,9 @@ function rotating_tai_hamiltonian(;
     θ = theta_grid
 
     V = Diagonal(V₀ .* cos.(m .* θ))
+    if !isnothing(scale_potential)
+        V = hamiltonian((V, scale_potential); check=false)
+    end
 
     dθ                                   = θ[2] - θ[1]
     nθ                                   = length(θ)
