@@ -1,5 +1,5 @@
 using QuantumPropagators.Amplitudes: ControlAmplitude
-using QuantumControlBase.PulseParametrizations: ShapedParametrizationPulseDerivative
+using QuantumControl.PulseParametrizations: ShapedParametrizationPulseDerivative
 using QuantumPropagators.Controls: discretize_on_midpoints
 
 import QuantumPropagators.Controls: evaluate

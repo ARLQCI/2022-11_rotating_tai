@@ -7,6 +7,7 @@ FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
 FileIO = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
 GR = "28b8d3ca-fb5f-59d9-8090-bfdbd6d07a71"
 GRAPE = "6b52fcaf-80fe-489a-93e9-9f92080510be"
+ImageIO = "82e4d734-157c-48bb-816b-45c225c6df19"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 Krotov = "b05dcdc7-62f6-4360-bf2c-0898bba419de"
 LBFGSB = "5be7bae1-8223-5378-bac3-9e7378a2f6e6"
@@ -26,8 +27,8 @@ UnicodePlots = "b8865327-cd53-5732-bb35-84acbb429228"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [compat]
-QuantumControl = "0.5.0"
-QuantumPropagators = "0.3.1"
+QuantumControl = "0.6.1"
+QuantumPropagators = "0.4.1"
 julia = "1.6"
 
 [extras]

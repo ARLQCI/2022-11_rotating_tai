@@ -1,4 +1,5 @@
 using LinearAlgebra
+using FFTW
 using QuantumPropagators
 using QuantumPropagators: Operator, Generator
 import QuantumPropagators.Controls: get_controls, evaluate, evaluate!, substitute
@@ -382,7 +383,7 @@ end
 function rotating_tai_hamiltonian(;
     tlist,
     theta_grid,
-    ω,  # function of time
+    ω,  # function/vector of time (amplitude)
     scale_potential=nothing,  # nothing, or function of time
     potential_depth,
     number_of_sites,
