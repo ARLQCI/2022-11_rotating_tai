@@ -14,7 +14,7 @@
 #     name: julia-1.8-multithread
 # ---
 
-# # Analyze the Separation Dynamics for Different Points in the Landscape 
+# # Analyze the Separation Dynamics for Different Points in the Landscape
 
 using Revise
 
@@ -234,7 +234,8 @@ function plot_expval_dynamics(
     figsize=(900, 350),
     title="θ and p expectation values",
     margin=15,
-    relative_to_theta=zeros(length(tlist))
+    relative_to_theta=zeros(length(tlist)),
+    show_lab_frame_displacement=true,
 )
     θ = @view expvals[1, :]
     σ_θ = @view expvals[2, :]
@@ -248,6 +249,11 @@ function plot_expval_dynamics(
     else
         ax_pos = plot(tlist ./ sec, θ′ ./ π; label="", xlabel="time", ylabel="Δθ (π)")
         ax_mom = plot(tlist ./ sec, p; label="p(t)", xlabel="time", ylabel="momentum")
+    end
+    if show_lab_frame_displacement
+        separation_time = tlist[end]
+        displacement = lab_frame_displacement(tlist, separation_time)[end]
+        hline!(ax_pos, [displacement / π ], ls=:dash, label="")
     end
     hline!(ax_mom, [momentum_target,], color="black", ls=:dash, label="target")
     plot(ax_pos, ax_mom; size=figsize, plot_title=title, margin=(margin * Plots.px))
@@ -281,11 +287,11 @@ function lab_frame_displacement(tlist::Vector{Float64}, separation_time::Float64
     @assert ω[1] ≈ 0.0
     θ = cumsum(ω) .* dt
     return θ
-    
+
 end
 # -
 
-function scan_t_r(potential_depth_index; frame=:moving)
+function scan_t_r(potential_depth_index; frame=:moving, kwargs...)
     i = potential_depth_index
     V0 = POINTS[i][1]
     for (j, t_r) in enumerate(POINTS[i][2])
@@ -296,9 +302,9 @@ function scan_t_r(potential_depth_index; frame=:moving)
         @assert length(θ_lab) == length(tlist)
         expvals = get_expval_dynamics(separation_time=t_r, potential_depth=V0, show=false)
         if frame == :moving
-            display(plot_expval_dynamics(tlist, expvals; title))
+            display(plot_expval_dynamics(tlist, expvals; title, kwargs...))
         elseif frame == :lab
-            display(plot_expval_dynamics(tlist, expvals; title, relative_to_theta=θ_lab))
+            display(plot_expval_dynamics(tlist, expvals; title, relative_to_theta=θ_lab, kwargs...))
         else
             error("Invalid frame=$(repr(frame))")
         end
@@ -306,7 +312,9 @@ function scan_t_r(potential_depth_index; frame=:moving)
     end
 end
 
-scan_t_r(1; frame=:moving)
+scan_t_r(1; frame=:moving, show_standard_deviations=false)
+
+scan_t_r(1; frame=:moving, show_standard_deviations=true)
 
 # ## 0.2 MHz
 
