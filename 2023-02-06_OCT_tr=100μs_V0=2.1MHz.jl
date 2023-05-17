@@ -7,11 +7,11 @@
 #       extension: .jl
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.11.3
+#       jupytext_version: 1.14.5
 #   kernelspec:
-#     display_name: Julia 1.8 (auto threads)
+#     display_name: Julia 1.8.5
 #     language: julia
-#     name: julia-1.8-multithread
+#     name: julia-1.8
 # ---
 
 # #  OCT for `t_r=100μs`, `V0=2.1MHz`
@@ -216,7 +216,7 @@ import QuantumPropagators.Storage: map_observables
 The values `σ_θ` and `σ_p` are the standard deviations from the expectation
 values ⟨θ⟩ and ⟨p⟩
 """
-function map_observables(observables::PositionMomentumObservables, Ψ)
+function map_observables(observables::PositionMomentumObservables, tlist, i, Ψ)
     # θ expectation value
     exp_val_theta = real(dot(Ψ, observables.theta_op, Ψ))
     exp_val_theta_sq = real(dot(Ψ, observables.theta_sq_op, Ψ))
@@ -241,6 +241,10 @@ function map_observables(observables::PositionMomentumObservables, Ψ)
     observables.vals[4] = sqrt(variance_momentum)
     return observables.vals
 
+end
+
+function map_observables(observables::PositionMomentumObservables, Ψ)
+    return map_observables(observables, nothing, 1, Ψ)
 end
 # -
 
@@ -334,7 +338,7 @@ function lab_frame_displacement(tlist::Vector{Float64}; separation_time=SEPARATI
     @assert ω[1] ≈ 0.0
     θ = cumsum(ω) .* dt
     return θ
-    
+
 end
 
 # +
@@ -410,7 +414,10 @@ plot(res.optimized_controls[1])
 
 H_opt = substitute(
     objective.generator,
-    Dict(ϵ => ϵ_opt for (ϵ, ϵ_opt) in zip(res.guess_controls, res.optimized_controls))
+    Dict(
+        ϵ => discretize_on_midpoints(ϵ_opt, TIME_GRID) for
+        (ϵ, ϵ_opt) in zip(get_controls(problem.objectives), res.optimized_controls)
+    )
 );
 
 function get_amplitudes(H::SplitGenerator)

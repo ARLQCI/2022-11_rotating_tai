@@ -381,7 +381,7 @@ end
 
 
 function rotating_tai_hamiltonian(;
-    tlist,
+    tlist=nothing,  # not used
     theta_grid,
     ω,  # function/vector of time (amplitude)
     scale_potential=nothing,  # nothing, or function of time
@@ -389,6 +389,7 @@ function rotating_tai_hamiltonian(;
     number_of_sites,
     mass,
     Ω=0.0,
+    model=:cos,
     direction=1
 )
 
@@ -396,7 +397,16 @@ function rotating_tai_hamiltonian(;
     V₀ = potential_depth
     θ = theta_grid
 
-    V = Diagonal(V₀ .* cos.(m .* θ))
+    if model == :cos
+        V = Diagonal(V₀ .* cos.(m .* θ))
+    elseif model == :harmonic
+        V = let θ₀ = π / number_of_sites, m = number_of_sites, M = mass
+            ω₀ = sqrt(V₀ * m^2 / M)
+            Diagonal((0.5 * M * ω₀^2) .* (θ .- θ₀).^2)
+        end
+    else
+        error("Invalid model: $(repr(model))")
+    end
     if !isnothing(scale_potential)
         V = hamiltonian((V, scale_potential); check=false)
     end

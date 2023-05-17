@@ -7,11 +7,11 @@
 #       extension: .jl
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.11.3
+#       jupytext_version: 1.14.5
 #   kernelspec:
-#     display_name: Julia 1.8 (auto threads)
+#     display_name: Julia 1.8.5
 #     language: julia
-#     name: julia-1.8-multithread
+#     name: julia-1.8
 # ---
 
 # #  OCT for `t_r=150μs`, `V0=0.2MHz`
@@ -47,7 +47,7 @@ const LOOP_TIME = 900ms;
 const OMEGA_TARGET = 10π / sec;
 const EFFECTIVE_MASS = TAI_RADIUS^2 * RUBIDIUM_MASS;
 const POTENTIAL_DEPTH = 0.2MHz;
-const MOMENTUM_TARGET = - EFFECTIVE_MASS * OMEGA_TARGET;
+const MOMENTUM_TARGET = -EFFECTIVE_MASS * OMEGA_TARGET;
 
 includet("./include/rotating_tai.jl");
 
@@ -218,7 +218,7 @@ import QuantumPropagators.Storage: map_observables
 The values `σ_θ` and `σ_p` are the standard deviations from the expectation
 values ⟨θ⟩ and ⟨p⟩
 """
-function map_observables(observables::PositionMomentumObservables, Ψ)
+function map_observables(observables::PositionMomentumObservables, tlist, i, Ψ)
     # θ expectation value
     exp_val_theta = real(dot(Ψ, observables.theta_op, Ψ))
     exp_val_theta_sq = real(dot(Ψ, observables.theta_sq_op, Ψ))
@@ -243,6 +243,10 @@ function map_observables(observables::PositionMomentumObservables, Ψ)
     observables.vals[4] = sqrt(variance_momentum)
     return observables.vals
 
+end
+
+function map_observables(observables::PositionMomentumObservables, Ψ)
+    return map_observables(observables, nothing, 1, Ψ)
 end
 # -
 
@@ -296,7 +300,8 @@ end
 # -
 
 function plot_expval_dynamics(
-    tlist, expvals;
+    tlist,
+    expvals;
     θ₀=0.125π,
     momentum_target=MOMENTUM_TARGET,
     show_standard_deviations=false,
@@ -304,7 +309,7 @@ function plot_expval_dynamics(
     title="θ and p expectation values",
     margin=15,
     relative_to_theta=zeros(length(tlist)),
-    show_lab_frame_displacement=true,
+    show_lab_frame_displacement=true
 )
     θ = @view expvals[1, :]
     σ_θ = @view expvals[2, :]
@@ -312,9 +317,22 @@ function plot_expval_dynamics(
     σ_p = @view expvals[4, :]
     θ′ = θ .- θ₀ .- relative_to_theta
     if show_standard_deviations
-        ax_pos =
-            plot(tlist ./ sec, θ′ ./ π; ribbon=σ_θ ./ π, label="", xlabel="time", ylabel="Δθ (π)")
-        ax_mom = plot(tlist ./ sec, p; ribbon=σ_p, label="p(t)", xlabel="time", ylabel="momentum")
+        ax_pos = plot(
+            tlist ./ sec,
+            θ′ ./ π;
+            ribbon=σ_θ ./ π,
+            label="",
+            xlabel="time",
+            ylabel="Δθ (π)"
+        )
+        ax_mom = plot(
+            tlist ./ sec,
+            p;
+            ribbon=σ_p,
+            label="p(t)",
+            xlabel="time",
+            ylabel="momentum"
+        )
     else
         ax_pos = plot(tlist ./ sec, θ′ ./ π; label="", xlabel="time", ylabel="Δθ (π)")
         ax_mom = plot(tlist ./ sec, p; label="p(t)", xlabel="time", ylabel="momentum")
@@ -322,21 +340,25 @@ function plot_expval_dynamics(
     if show_lab_frame_displacement
         separation_time = tlist[end]
         displacement = lab_frame_displacement(tlist; separation_time)[end]
-        hline!(ax_pos, [displacement / π ], ls=:dash, label="")
+        hline!(ax_pos, [displacement / π], ls=:dash, label="")
     end
     hline!(ax_mom, [momentum_target,], color="black", ls=:dash, label="target")
     plot(ax_pos, ax_mom; size=figsize, plot_title=title, margin=(margin * Plots.px))
 end
 
 # +
-function lab_frame_displacement(tlist::Vector{Float64}; separation_time=SEPARATION_TIME, ω₀=OMEGA_TARGET)
+function lab_frame_displacement(
+    tlist::Vector{Float64};
+    separation_time=SEPARATION_TIME,
+    ω₀=OMEGA_TARGET
+)
 
     dt = tlist[2] - tlist[1]
     ω = discretize(t -> omega_ramp_up(t; w0=ω₀, t_r=separation_time), tlist)
     @assert ω[1] ≈ 0.0
     θ = cumsum(ω) .* dt
     return θ
-    
+
 end
 
 # +
@@ -406,22 +428,53 @@ problem = ControlProblem(;
 );
 # -
 
-res = optimize(problem; method=:krotov, iter_stop=200)
+res = @optimize_or_load(
+    "./data/2023-02-06_OCT_tr=150μs_V0=0.2MHz.jld2", problem;
+    method=:krotov, iter_stop=200
+)
+
+plot(res.guess_controls[1])
 
 plot(res.optimized_controls[1])
 
 H_opt = substitute(
     objective.generator,
-    Dict(ϵ => ϵ_opt for (ϵ, ϵ_opt) in zip(res.guess_controls, res.optimized_controls))
+    Dict(
+        ϵ => discretize_on_midpoints(ϵ_opt, TIME_GRID) for
+        (ϵ, ϵ_opt) in zip(get_controls(problem.objectives), res.optimized_controls)
+    )
 );
 
 function get_amplitudes(H::SplitGenerator)
-    amplitudes =  H.T.amplitudes
+    amplitudes = H.T.amplitudes
     return Array.(amplitudes)
 end
 
-plot(TIME_GRID ./ μs, discretize(get_amplitudes(H_opt)[1], TIME_GRID) ./ (π/sec), label="optimized")
-plot!(TIME_GRID ./ μs, discretize(omega_ramp_up, TIME_GRID) ./ (π/sec), label="guess")
-plot!(;xlabel="time (μs)", ylabel="ω (π/sec)")
+plot(
+    TIME_GRID ./ μs,
+    discretize(get_amplitudes(H_opt)[1], TIME_GRID) ./ (π / sec),
+    label="optimized"
+)
+plot!(TIME_GRID ./ μs, discretize(omega_ramp_up, TIME_GRID) ./ (π / sec), label="guess")
+plot!(; xlabel="time (μs)", ylabel="ω (π/sec)")
+
+using FileIO: save, load
+
+save(
+    "./data/2023-02-06_OCT_tr=150μs_V0=0.2MHz_opt_amplitude.npz",
+    discretize(get_amplitudes(H_opt)[1], TIME_GRID)
+);
+
+load("./data/2023-02-06_OCT_tr=150μs_V0=0.2MHz_opt_amplitude.npz")
+
+plot(
+    TIME_GRID ./ μs,
+    (
+        discretize(get_amplitudes(H_opt)[1], TIME_GRID) .-
+        discretize(omega_ramp_up, TIME_GRID)
+    ) ./ (π / sec),
+    label="ΔΩ"
+)
+plot!(; xlabel="time (μs)", ylabel="ω (π/sec)")
 
 # The solution depends strongly on the value of λₐ
