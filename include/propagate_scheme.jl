@@ -199,6 +199,7 @@ function propagate_scheme_one_direction(
     Ω=0.0,
     model=:cos,
     ret=:state,
+    verbose_displacement=false,
     kwargs...
 )
     @assert length(θ) == length(Ψ₀)
@@ -214,16 +215,24 @@ function propagate_scheme_one_direction(
     ω₀ = omega_0
     @assert ω_up[end] ≈ ω₀
     Φ = sum(ω_up) * dt # Accumulated movement
-
+    if verbose_displacement
+        @info "Accumulated movement after omega_up: Φ = $(Φ / π)π"
+    end
     # "down" segment
     tlist_down = collect(range(0, t_r, length=nt))  # temporarily, see below
     ω_down = discretize_on_midpoints(omega_down, tlist_down)
     @assert ω_down[1] ≈ ω₀
     Φ += sum(ω_down) * dt  # Accumulated movement
+    if verbose_displacement
+        @info "Accumulated movement after omega_up + omega_down: Φ = $(Φ / π)π"
+    end
 
     # "free" segment (requires knowledge of Φ from "up" and "down" segments)
     Φtgt = n_cycles * π
     t_free = (Φtgt - Φ) / ω₀
+    if verbose_displacement
+        @info "Calculated free evolution time to reach Φ = $(Φtgt / π)π: t_free = $(t_free / ms)ms"
+    end
     if t_free ≤ 0.0
         @error "No free time evolution: 'up' and 'down' already achieve $(Φ/π) cycles"
     end
@@ -231,6 +240,19 @@ function propagate_scheme_one_direction(
         tlist_free = [t_r, t_r + t_free]
     else
         tlist_free = collect(range(t_r, t_r + t_free, length=nt_free))
+    end
+    ω_free = discretize_on_midpoints(Float64[ω₀ for t in tlist_free], tlist_free)
+
+    if verbose_displacement
+        Φ_up =  cumint(ω_up, tlist_up; start=0.0)
+        Φ_free =  cumint(ω_free, tlist_free; start=Φ_up[end])
+        Φ_down =  cumint(ω_down, tlist_down; start=Φ_free[end])
+        @info """
+        Total accumulated movement:
+        Φ_up[begin] = $(Φ_up[begin]/π)π, Φ_up[end] = $(Φ_up[end]/π)π;
+        Φ_free[begin] = $(Φ_free[begin]/π)π, Φ_free[end] = $(Φ_free[end]/π)π;
+        Φ_down[begin] = $(Φ_down[begin]/π)π, Φ_down[end] = $(Φ_down[end]/π)π
+        """
     end
 
     # "down" segment (corrected time grid)
@@ -243,7 +265,7 @@ function propagate_scheme_one_direction(
     if ret == :omega_vals
         return (
             discretize(ω_up, tlist_up),
-            Float64[ω₀ for t in tlist_free],
+            discretize(ω_free, tlist_free),
             discretize(ω_down, tlist_down)
         )
     end
@@ -444,6 +466,7 @@ function propagate_scheme(;
     frame=:mixed,
     ret=:P_right,
     initialize_with_Ω=true,
+    verbose_displacement=false,
     kwargs...
 )
 
@@ -493,6 +516,7 @@ function propagate_scheme(;
         θ;
         ret=:omega_vals,
         direction=1,
+        verbose_displacement,
         prop_args...
     )
 

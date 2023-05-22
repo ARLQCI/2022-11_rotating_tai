@@ -14,9 +14,7 @@
 #     name: julia-1.8
 # ---
 
-# #  OCT for `t_r=150μs`, `V0=0.2MHz`
-
-# We are optimizing for point (5) at 0.2 MHz in `2023-02-01_map_analysis.ipynb`. We are varying *only* ω(t), not V₀(t)
+# #  OCT for `t_r=150μs`, `V0=0.2MHz`, `R=26μm`, `ω₀=50π/s`
 
 using QuantumPropagators
 using LinearAlgebra
@@ -40,14 +38,15 @@ const MHz = 2π;
 const Dalton = 1.5746097504353806e+01;
 
 const RUBIDIUM_MASS = 86.91Dalton;
-const TAI_RADIUS = 42μm
+const TAI_RADIUS = 25.46μm
 const N_SITES = 8;
 const SEPARATION_TIME = 150μs;
-const LOOP_TIME = 900ms;
-const OMEGA_TARGET = 10π / sec;
+const OMEGA_TARGET = 50π / sec;
 const EFFECTIVE_MASS = TAI_RADIUS^2 * RUBIDIUM_MASS;
 const POTENTIAL_DEPTH = 0.2MHz;
 const MOMENTUM_TARGET = -EFFECTIVE_MASS * OMEGA_TARGET;
+
+const NAME = "2023-05-17_OCT_tr=150μs_V0=0.2MHz_R=26μm_ω=50πps"
 
 includet("./include/rotating_tai.jl");
 
@@ -423,14 +422,15 @@ problem = ControlProblem(;
     #specrange_method=:manual,
     #check_normalization=true,
     check_convergence=res -> begin
-        ((res.J_T < 1e-4) && (res.converged = true) && (res.message = "J_T < 10⁻⁴"))
+        ((res.J_T < 1e-8) && (res.converged = true) && (res.message = "J_T < 10⁻⁸"))
     end
-);
+)
 # -
 
 res = @optimize_or_load(
-    "./data/2023-02-06_OCT_tr=150μs_V0=0.2MHz.jld2", problem;
-    method=:krotov, iter_stop=200, force=true,
+    "./data/$NAME.jld2", problem;
+    method=:krotov, iter_stop=400,
+    force=true
 )
 
 plot(res.guess_controls[1])
@@ -460,12 +460,14 @@ plot!(; xlabel="time (μs)", ylabel="ω (π/sec)")
 
 using FileIO: save, load
 
+opt_amplitude_outfile = "./data/$(NAME)_opt_amplitude.npz"
+
 save(
-    "./data/2023-02-06_OCT_tr=150μs_V0=0.2MHz_opt_amplitude.npz",
+    opt_amplitude_outfile,
     discretize(get_amplitudes(H_opt)[1], TIME_GRID)
 );
 
-load("./data/2023-02-06_OCT_tr=150μs_V0=0.2MHz_opt_amplitude.npz")
+load(opt_amplitude_outfile) ./ (π/sec)
 
 plot(
     TIME_GRID ./ μs,
