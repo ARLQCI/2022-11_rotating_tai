@@ -6,7 +6,6 @@
 /2023*.ipynb
 /*.mp4
 /*.gif
-/Manifest.toml
 /LocalPreferences.toml
 /examples/dump/
 /test/Manifest.toml
