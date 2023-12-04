@@ -14,7 +14,9 @@
 #     name: julia-1.8
 # ---
 
-# # Lab Frame Observables for an Adiabatic Interferometric Scheme
+# # Lab Frame Observables for an Adiabatic Interferometric Scheme at ω=10π/ps
+
+# This should reproduce Fig 4 in the paper
 
 using QuantumPropagators
 using LinearAlgebra
@@ -44,14 +46,13 @@ const RUBIDIUM_MASS = 86.91Dalton;
 const TAI_RADIUS = 25.46μm
 const N_SITES = 8;
 const SEPARATION_TIME = 0.1sec;
-const OMEGA_TARGET = 50π / sec;
+const OMEGA_TARGET = 10π / sec;
 const EFFECTIVE_MASS = TAI_RADIUS^2 * RUBIDIUM_MASS;
 const POTENTIAL_DEPTH = 2.2MHz;
 const MOMENTUM_TARGET = -EFFECTIVE_MASS * OMEGA_TARGET;
 const MOMENTUM_UNIT = EFFECTIVE_MASS * π / sec;
 
-datadir(folders...) = joinpath(".", "data", "2023-05-17_adiabatic_full_scheme", folders...)
-
+datadir(folders...) = joinpath(".", "data", "2023-05-25_adiabatic_ω=10πps", folders...)
 mkpath(datadir())
 
 includet("./include/rotating_tai.jl")
@@ -76,10 +77,35 @@ args = Dict{Symbol,Any}(
     :omega_down => omega_ramp_down,
     :omega_0 => OMEGA_TARGET,
     :t_r => SEPARATION_TIME,
-    :n_cycles => 10,
     :nt_free => 10_000,
     :initialize_with_Ω => true,
 )
+
+# ## Benchmarking
+
+# We compare the split propagator and Chebychev
+
+# +
+frame=:lab
+
+@time propagate_scheme(;
+    args...,
+    n_cycles=1, # no free evolution
+    parallel=true,
+    ret=:expvals,
+    method=:cheby,
+    frame,
+);
+# -
+
+@time propagate_scheme(;
+    args...,
+    n_cycles=1, # no free evolution
+    parallel=true,
+    ret=:expvals,
+    method=:splitprop,
+    frame,
+);
 
 # ## Ideal dynamics (Ω=0)
 
@@ -88,12 +114,18 @@ frame=:lab
 
 tlists, omega_vals, expvals_left, expvals_right = propagate_scheme(;
     args...,
+    n_cycles=2,
     parallel=true,
     ret=:expvals,
     frame,
 );
+# -
 
+map(length, tlists)
 
+tlists[1][2] ./ μs
+
+# +
 df = collect_dynamics_dataframe(tlists, omega_vals, expvals_left; steps_up=1000, steps_free=100, steps_down=1000)
 
 open(datadir("dynamics_adiabatic_lab.csv"), "w") do file
@@ -115,6 +147,7 @@ frame=:moving
 
 tlists, omega_vals, expvals_left_Ω0, expvals_right_Ω0 = propagate_scheme(;
     args...,
+    n_cycles=2,
     parallel=true,
     ret=:expvals,
     frame
@@ -131,6 +164,7 @@ end
 
 _, _, states_left_Ω0, states_right_Ω0 = propagate_scheme(;
     args...,
+    n_cycles=2,
     parallel=true,
     ret=:states,
     frame
@@ -144,12 +178,12 @@ plot_full_pos_mom_dynamics(
 )
 # -
 
-# ## Response to Ω ≠ 0
+# ## Response to Ω ≠ 0 (2 cycles)
 
 using QuantumControlBase: @threadsif
 
 """Evaluate the final "right" population depending on Ω."""
-function scan_signal(; parallel=1, n_samples=21, n_cycles=10, Ω_max = 4 * (0.5 / n_cycles) / sec, kwargs...)
+function scan_signal(; parallel=1, n_samples=21, n_cycles, Ω_max, kwargs...)
     if parallel ≡ true
         parallel=1
     end
@@ -167,20 +201,25 @@ function scan_signal(; parallel=1, n_samples=21, n_cycles=10, Ω_max = 4 * (0.5 
     return Ω_vals, P_vals
 end
 
-Ω_vals, P_vals = scan_signal(;
-    args...,
-    parallel=2,
-);
-
-plot(Ω_vals / (π/sec), P_vals; label="", xlabel="Ω (π/sec)", ylabel="population (right)")
-
-function contrast(populations)
-    P_max = maximum(populations)
-    P_min = minimum(populations)
-    return (P_max - P_min) / (P_max + P_min)
+Ω_vals_2cyc, P_vals_2cyc = run_or_load(datadir("sagnac_adiabatic_10πps_2cyc.jld2")) do
+    scan_signal(;
+        n_cycles=2,
+        Ω_max=(0.667588/sec),
+        n_samples=11,
+        args...,
+        parallel=2,
+    )
 end;
 
-contrast(P_vals)
+plot(Ω_vals_2cyc / (1/sec), 1 .- P_vals_2cyc; label="", marker=true, xlabel="Ω (rad/sec)", ylabel="population")
+
+open(datadir("sagnac_adiabatic_10πps_2cyc.csv"), "w") do file
+    println(file, "Ω (rad/s),|c₋|²")
+    for (Ω_val, P_val) in zip(Ω_vals_2cyc, P_vals_2cyc)
+        print(file, @sprintf("%.6f,", Ω_val / (1/sec)))
+        println(file, @sprintf("%.6f", 1 - P_val))
+    end
+end
 
 # ### Sagnac curve for paper
 
@@ -189,7 +228,9 @@ function sagnac_phase(Ω, ; Φ, R=TAI_RADIUS, M=RUBIDIUM_MASS)
     return 4 * M * Ω * A
 end
 
-function sagnac_peak(;R=TAI_RADIUS, M=RUBIDIUM_MASS, Φ=10π)
+# position of peak:
+
+function sagnac_peak(;R=TAI_RADIUS, M=RUBIDIUM_MASS, Φ=2π)
     """The value of Ω for which the Sagnac phase is π."""
     A = (R^2 / 2) * Φ
     return π / (4 * M * A)
@@ -205,7 +246,7 @@ end
 
 function sagnac_population(
     Ω_vals;
-    Φ=10π,
+    Φ=2π,
     R=TAI_RADIUS,
     M=RUBIDIUM_MASS,
 )
@@ -213,8 +254,28 @@ function sagnac_population(
     return cos.(ΔΦ / 2) .^ 2
 end
 
-Ω_vals_10cyc, P_vals_10cyc = run_or_load(datadir("sagnac_adiabatic_50πps_10cyc.jld2")) do
+sagnac_peak() / (1/sec)
+
+# Position of x-ticks in plot:
+
+sagnac_peak() / (1e-2*π/sec)
+
+2 * sagnac_peak() / (1e-2*π/sec)
+
+open(datadir("sc_10πps_2cyc.csv"), "w") do file
+    _Ω_vals = collect(range(0, 0.667588/sec, length=200))
+    println(file, "Ω (rad/s),|c₋|²")
+    for (Ω_val, P_val) in zip(_Ω_vals, sagnac_population(_Ω_vals))
+        print(file, @sprintf("%.6f,", Ω_val / (1/sec)))
+        println(file, @sprintf("%.6f", 1 - P_val))
+    end
+end
+
+# ## Response to Ω ≠ 0 (9 cycles)
+
+Ω_vals_9cyc, P_vals_9cyc = run_or_load(datadir("sagnac_adiabatic_10πps_9cyc.jld2")) do
     scan_signal(;
+        n_cycles=9,
         Ω_max=(0.667588/sec),
         n_samples=86,
         args...,
@@ -222,33 +283,12 @@ end
     )
 end;
 
-plot(Ω_vals_10cyc / (1/sec), 1 .- P_vals_10cyc; label="", marker=true, xlabel="Ω (rad/sec)", ylabel="population")
+plot(Ω_vals_9cyc / (1/sec), 1 .- P_vals_9cyc; label="", marker=true, xlabel="Ω (rad/sec)", ylabel="population")
 
-plot(Ω_vals_10cyc / (π/sec), 1 .- P_vals_10cyc; label="quantum (SP)", marker=true, xlabel="Ω (rad/sec)", ylabel="population")
-plot!(Ω_vals_10cyc / (π/sec), 1 .- sagnac_population(Ω_vals_10cyc); linestyle=:dash, label="semiclassical", xlabel="Ω (rad/sec)", ylabel="population")
-
-open(datadir("sagnac_adiabatic_50πps_10cyc.csv"), "w") do file
+open(datadir("sagnac_adiabatic_10πps_9cyc.csv"), "w") do file
     println(file, "Ω (rad/s),|c₋|²")
-    for (Ω_val, P_val) in zip(Ω_vals_10cyc, P_vals_10cyc)
+    for (Ω_val, P_val) in zip(Ω_vals_9cyc, P_vals_9cyc)
         print(file, @sprintf("%.6f,", Ω_val / (1/sec)))
         println(file, @sprintf("%.6f", 1 - P_val))
     end
 end
-
-open(datadir("sc_50πps_10cyc.csv"), "w") do file
-    println(file, "Ω (rad/s),|c₋|²")
-    for (Ω_val, P_val) in zip(Ω_vals_10cyc, sagnac_population(Ω_vals_10cyc))
-        print(file, @sprintf("%.6f,", Ω_val / (1/sec)))
-        println(file, @sprintf("%.6f", 1 - P_val))
-    end
-end
-
-sagnac_peak() / (1/sec)
-
-sagnac_peak() / (1e-2*π/sec)
-
-2 * sagnac_peak() / (1e-2*π/sec)
-
-10 * sagnac_peak() / (1e-2*π/sec)
-
-

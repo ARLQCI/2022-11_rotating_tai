@@ -124,6 +124,8 @@ HAMILTONIAN, TIME_GRID = propagate_splitting(; ret=:system);
 
 INITIAL_STATE, THETA_GRID = propagate_splitting(; ret=:initial_state);
 
+THETA_GRID
+
 # ## Target state
 
 TARGET_STATE, _ = propagate_splitting(; ret=:target);
@@ -407,31 +409,17 @@ objective = Objective(
     initial_state=INITIAL_STATE,
     target_state=TARGET_STATE,
     generator=set_guided_control(HAMILTONIAN, TIME_GRID)
-)
-
-# +
+);
 δω = get_controls(objective.generator)[1];
 
 problem = ControlProblem(;
-    objectives=[objective],
-    tlist=TIME_GRID,
-    J_T=J_T_sm,
-    prop_method=:splitprop,
-    verbose=true,
+    objectives=[objective], tlist=TIME_GRID,
+    J_T=J_T_sm, prop_method=:splitprop, verbose=false,
     pulse_options=IdDict(δω => Dict(:lambda_a => 1e6, :update_shape => t -> 1.0)),
-    #specrange_method=:manual,
-    #check_normalization=true,
-    check_convergence=res -> begin
-        ((res.J_T < 1e-8) && (res.converged = true) && (res.message = "J_T < 10⁻⁸"))
-    end
-)
-# -
+    check_convergence=res -> begin ((res.J_T < 1e-8) && (res.converged = true) && (res.message = "J_T < 10⁻⁸")) end
+);
 
-res = @optimize_or_load(
-    "./data/$NAME.jld2", problem;
-    method=:krotov, iter_stop=400,
-    force=true
-)
+res = @optimize_or_load("./data/$NAME.jld2", problem; method=:krotov, iter_stop=400, force=true)
 
 plot(res.guess_controls[1])
 
@@ -453,10 +441,25 @@ end
 plot(
     TIME_GRID ./ μs,
     discretize(get_amplitudes(H_opt)[1], TIME_GRID) ./ (π / sec),
+    linewidth=2,
     label="optimized"
 )
-plot!(TIME_GRID ./ μs, discretize(omega_ramp_up, TIME_GRID) ./ (π / sec), label="guess")
+plot!(
+    TIME_GRID ./ μs,
+    discretize(omega_ramp_up, TIME_GRID) ./ (π / sec),
+    linewidth=2,
+    label="guess"
+)
 plot!(; xlabel="time (μs)", ylabel="ω (π/sec)")
+
+csv_outfile = "./data/$(NAME)_guess_opt_controls.csv"
+
+open(csv_outfile, "w") do file
+  println(file, join(["time (μs)", "ω_guess (π/sec)", "ω_opt (π/sec)"], ","))
+  for vals in zip(TIME_GRID ./ μs, discretize(omega_ramp_up, TIME_GRID) ./ (π / sec), discretize(get_amplitudes(H_opt)[1], TIME_GRID) ./ (π / sec))
+      println(file, join([@sprintf("%.6f", v) for v in vals], ","))
+  end
+end
 
 using FileIO: save, load
 

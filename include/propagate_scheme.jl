@@ -398,6 +398,8 @@ end
 
 """Propagate an entire pulse scheme from scratch.
 
+The initial state is the "right" state (↓).
+
 # Keyword arguments
 
 * `theta_grid`: the grid for θ. Defaults to 1024 grid point ∈ [0, 0.25π].
@@ -528,11 +530,11 @@ function propagate_scheme(;
 
     Ĥ₀ = evaluate(Ĥ₀_of_t, tlist_up, 1)
 
-    Ψleft = get_ground_state(Ĥ₀, θ, (2π / (2 * number_of_sites)))
-    Ψright = zeros(ComplexF64, length(Ψleft))
+    Ψright = get_ground_state(Ĥ₀, θ, (2π / (2 * number_of_sites)))
+    Ψleft = zeros(ComplexF64, length(Ψright))
 
     if ret == :initial_state
-        return Ψleft
+        return Ψright
     end
 
     prop_args[:Ω] = Ω
@@ -687,7 +689,7 @@ function propagate_scheme(;
         @. storages_right[3][1, :] += Δθ_lab_down
     end
 
-    Ψleft, Ψright = (0.5 * U_πhalf) * [Ψleft, Ψright]
+    Ψleft, Ψright = (0.5 * U_πhalf') * [Ψleft, Ψright]
     # The factor 0.5 corrects the "modified" U_πhalf. The resulting Ψleft and
     # Ψright are no longer independently normalized. Instead, the square of
     # their norm corresponds to the relative population.
@@ -970,8 +972,8 @@ function test_propagate_scheme()
     pos_mom_obs = PositionMomentumObservables(; theta_grid)
 
     U_recombine = 0.5 * [
-        1  𝕚
-        𝕚  1
+        1  -𝕚
+        -𝕚  1
     ]
 
     states_left = Dict{Symbol,Any}()
