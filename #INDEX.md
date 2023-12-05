@@ -104,3 +104,7 @@ Most importantly, we adjusted the radius to 26μm.
 * [2023-05-18_harmonic_dynamics_R=26μm_ω=50πps.ipynb](2023-05-18_harmonic_dynamics_R=26μm_ω=50πps.ipynb) — comparing the dynamics of the cos potential with a harmonic potential
 * [2023-05-25_adiabatic_full_scheme_R=26μm_ω=10πps.ipynb](2023-05-25_adiabatic_full_scheme_R=26μm_ω=10πps.ipynb)
 * [2023-05-27_spectral_radius.ipynb](2023-05-27_spectral_radius.ipynb)
+
+**2023-12-04** — Further exploration based on referee reports
+
+* [2023-12-04_optimized_full_scheme_robustness.ipynb](2023-12-04_optimized_full_scheme_robustness.ipynb) — How does the contrast change if we take the optimal solution obtained at V₀=0.2MHz and run it at a 10% variation of V₀. Answer: not much changes, not even if we use the original eigenstate as the original state (worst case for V₀ that varies over time)

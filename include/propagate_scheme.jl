@@ -424,6 +424,8 @@ The initial state is the "right" state (↓).
 * `model=:cos`: The potential to use. By default (`model=:cos`), use the cosine
   potential. Alternatively, for `model=:harmonic`, use a harmonic approximation
   of the cosine potential.
+* `Ψ₀=nothing`: Optional initial state on the "right" potential. If not given,
+  the initial state is determined as the eigenstate.
 * `initialize_with_Ω=true`: Whether to include the background rotation `Ω` when
   calculating the initial eigenstate.
 * `frame=:mixed`: The frame for the returned states or expectation values.
@@ -467,6 +469,7 @@ function propagate_scheme(;
     model=:cos,
     frame=:mixed,
     ret=:P_right,
+    Ψ₀=nothing,
     initialize_with_Ω=true,
     verbose_displacement=false,
     kwargs...
@@ -530,7 +533,11 @@ function propagate_scheme(;
 
     Ĥ₀ = evaluate(Ĥ₀_of_t, tlist_up, 1)
 
-    Ψright = get_ground_state(Ĥ₀, θ, (2π / (2 * number_of_sites)))
+    if isnothing(Ψ₀)
+        Ψright = get_ground_state(Ĥ₀, θ, (2π / (2 * number_of_sites)))
+    else
+        Ψright = Ψ₀
+    end
     Ψleft = zeros(ComplexF64, length(Ψright))
 
     if ret == :initial_state
