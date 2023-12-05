@@ -45,10 +45,10 @@ norm(Ψ₀ - (U * (U' * Ψ₀)))
 
 @test norm(Ψ₁ - Ψ₂) < 1e-12
 
-Ψ₃ = propagate(Ψ₀, H, [0.0, dt]; method=:free);
+Ψ₃ = propagate(Ψ₀, H, [0.0, dt]; method=:freeprop);
 
 @test norm(Ψ₁ - Ψ₃) < 1e-12
 
-Ψ₄ = propagate(Ψ₀, H, [0.0, dt/2, dt]; method=:free);
+Ψ₄ = propagate(Ψ₀, H, [0.0, dt/2, dt]; method=:freeprop);
 
 @test norm(Ψ₁ - Ψ₄) < 1e-12

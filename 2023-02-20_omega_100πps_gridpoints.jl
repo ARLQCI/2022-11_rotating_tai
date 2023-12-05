@@ -11,7 +11,7 @@
 #   kernelspec:
 #     display_name: Julia 1.8 (auto threads)
 #     language: julia
-#     name: julia-1.8-multithread
+#     name: julia-1.8
 # ---
 
 # # Choose grid points for ω₀=100π/s

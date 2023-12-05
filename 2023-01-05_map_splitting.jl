@@ -19,6 +19,7 @@
 # ## Hamiltonian
 
 using QuantumPropagators
+using QuantumPropagators.Storage: init_storage
 using LinearAlgebra
 using FFTW
 using Serialization
